@@ -1235,13 +1235,14 @@ export function apply(ctx) {
           // Every Host start begins with the switch off; a stored "on" from
           // the previous session is persisted back to off instead of being
           // resumed. The user turns it on from the control panel when needed.
+          // The reset is an internal correction: by design the LAN feature is
+          // off at every start, so the startup prints nothing about it.
           lanSwitchOnThisRun = false;
           try {
             await resetLanAccessOnStartup(lanPreferencesFile, lanLegacyPreferencesFile, log);
           } catch (error) {
             log(`LAN startup reset failed: ${error?.message ?? error}`);
           }
-          log('LAN access is off for this startup; turn it on manually from the control panel');
         })();
         return () => {
           void lanProxy.stop();

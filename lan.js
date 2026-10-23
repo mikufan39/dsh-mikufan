@@ -223,17 +223,18 @@ export function effectiveLanAccessEnabled(saved, switchOnThisRun) {
  * Enforce the per-startup switch policy: a new Host process never starts the
  * LAN proxy. When the stored switch is on from the previous session, persist it
  * off so the panel switch and the status endpoint agree from the first read.
+ * The reset is an internal correction and prints nothing: the LAN feature is
+ * off by design at every Host start, so startup has no LAN news to report.
  * @param file - absolute path of the LAN preference file.
  * @param legacyFile - absolute path of the former dsh-lan-access preference file.
- * @param log - reporter.
+ * @param log - reporter accepted for call compatibility; never invoked here.
  * @returns the effective preferences for this startup.
  */
 export async function resetLanAccessOnStartup(file, legacyFile, log) {
   const saved = await readLanPreferences(file, legacyFile);
   if (saved.lanAccessEnabled !== true) return saved;
   const next = { ...saved, lanAccessEnabled: false };
-  await saveLanPreferences(file, next, log);
-  log?.('LAN access was on in the previous session; reset to off for this startup');
+  await saveLanPreferences(file, next, () => {});
   return next;
 }
 
