@@ -1,0 +1,58 @@
+<!-- dsh-mikufan · boot-overlay bridge.
+
+     The Host serves `splash/index.html` with this block inserted before
+     `</body>`; the standalone asset file itself stays byte-for-byte untouched.
+     When the document runs inside the Harness boot iframe it hides the player
+     chrome, disables the standalone R/F shortcuts, and reports ready/ended to
+     the parent. Opened directly (a preview), the page keeps both the chrome
+     and the shortcuts. -->
+<script>
+(() => {
+  'use strict';
+  if (window.parent === window) return;
+
+  const root = document.documentElement;
+  const style = document.createElement('style');
+  style.textContent = '.chrome{display:none!important}';
+  document.head.appendChild(style);
+
+  let ended = false;
+  const send = (type) => {
+    try {
+      parent.postMessage({ source: 'dsh-mikufan-splash', type }, '*');
+    } catch (error) {
+      /* the embedding page is already gone */
+    }
+  };
+  const announceEnd = () => {
+    if (ended) return;
+    ended = true;
+    send('ended');
+  };
+
+  /* `is-done` appears at the final cue (4.92s, or immediately with reduced
+     motion) and never disappears again, so it is the end signal. */
+  const observer = new MutationObserver(() => {
+    if (root.classList.contains('is-done')) {
+      observer.disconnect();
+      announceEnd();
+    }
+  });
+  observer.observe(root, { attributes: true, attributeFilter: ['class'] });
+  if (root.classList.contains('is-done')) {
+    observer.disconnect();
+    announceEnd();
+  }
+
+  window.addEventListener('keydown', (event) => {
+    if (event.metaKey || event.ctrlKey || event.altKey) return;
+    const key = event.key;
+    if (key === 'r' || key === 'R' || key === 'f' || key === 'F') {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+    }
+  }, true);
+
+  send('ready');
+})();
+</script>

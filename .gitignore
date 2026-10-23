@@ -1,0 +1,9 @@
+node_modules/
+*.log
+npm-debug.log*
+.DS_Store
+Thumbs.db
+
+# Local-only development files, not published with the repository
+tests/
+HANDOFF.md

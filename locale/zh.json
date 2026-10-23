@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Mikufan",
+    "description": "六个内置功能：Delete-sessions（会话「...」菜单标记删除，下次启动真正删除）、Startup animation（5 秒开机动画）、Local memory（Agent 本地长期记忆：memory_* 工具 + 会话记忆索引）、LAN access（免 token 局域网入口，已并入原 dsh-lan-access 引擎；每次启动后默认关闭，需在页面手动开启）、Skills（管理 ~/.dsh/skills；支持按名称/描述搜索；新建技能/卡片打开/立即试用会新开会话并只预填对应的 /技能名 引用；详情浮层展示 SKILL.md，并可在文件管理器中定位或复制 Markdown）、Agent（编辑所选机器上的 ~/.dsh/AGENTS.md：页面只有一个文本框，保存后写入该文件，清空保存即移除；仓库级 AGENTS.md 仍会叠加生效）。侧栏「控制面板」是管理中枢（控制面板 / 记忆 / 局域网访问 / Skills / Agent / MCP 六页）。"
+  }
+}

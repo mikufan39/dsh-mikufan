@@ -1,0 +1,1064 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#050507">
+<meta name="od-motion-output" content="interactive">
+<title>DeepSeek Harness — 开屏动画</title>
+<meta name="description" content="DeepSeek Harness 开屏动画：光点汇聚成 DeepSeek 鲸标，五秒，一次。">
+<style>
+/* ─────────────────────────────────────────────────────────────────────────
+ * 1 · Apple design-system tokens (verbatim contract)
+ * ───────────────────────────────────────────────────────────────────────── */
+:root {
+  /* ─── Surface (3 levels) ────────────────────────────────────────── */
+  --bg: #ffffff;
+  --surface: #f5f5f7;
+  --surface-warm: #fbfbfd;
+
+  /* ─── Foreground ramp (4 levels) ───────────────────────────────── */
+  --fg: #1d1d1f;
+  --fg-2: #424245;
+  --muted: #6e6e73;
+  --meta: #86868b;
+
+  /* ─── Border (2 levels) ────────────────────────────────────────── */
+  --border: #d2d2d7;
+  --border-soft: #e8e8ed;
+
+  /* ─── Accent ────────────────────────────────────────────────────── */
+  --accent: #0071e3;
+  --accent-on: #ffffff;
+
+  /* ─── Accent states ─────────────────────────────────────────────── */
+  --accent-hover: #0077ed;
+  --accent-active: #0066cc;
+
+  /* ─── Semantic ──────────────────────────────────────────────────── */
+  --success: #16a34a;
+  --warn:    #eab308;
+  --danger:  #dc2626;
+
+  /* ─── Typography ────────────────────────────────────────────────── */
+  --font-display:
+    "SF Pro Display", "SF Pro Icons", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --font-body:
+    "SF Pro Text", "SF Pro Icons", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --font-mono:
+    "SF Mono", ui-monospace, "JetBrains Mono", Menlo, Monaco, Consolas, monospace;
+
+  /* Type scale (px) */
+  --text-xs:   12px;
+  --text-sm:   14px;
+  --text-base: 17px;
+  --text-lg:   21px;
+  --text-xl:   28px;
+  --text-2xl:  40px;
+  --text-3xl:  56px;
+  --text-4xl:  80px;
+
+  --leading-body:  1.47;
+  --leading-tight: 1.05;
+  --tracking-display: -0.015em;
+
+  /* ─── Spacing ───────────────────────────────────────────────────── */
+  --space-1:  4px;
+  --space-2:  8px;
+  --space-3:  12px;
+  --space-4:  16px;
+  --space-5:  20px;
+  --space-6:  24px;
+  --space-8:  32px;
+  --space-12: 48px;
+
+  /* ─── Section rhythm ────────────────────────────────────────────── */
+  --section-y-desktop: 100px;
+  --section-y-tablet:  64px;
+  --section-y-phone:   40px;
+
+  /* ─── Radius ────────────────────────────────────────────────────── */
+  --radius-sm:   8px;
+  --radius-md:   12px;
+  --radius-lg:   18px;
+  --radius-pill: 980px;
+
+  /* ─── Elevation (3 levels) ──────────────────────────────────────── */
+  --elev-flat:   none;
+  --elev-ring:   0 0 0 1px var(--border);
+  --elev-raised: 0 12px 32px rgba(0, 0, 0, 0.08);
+
+  /* ─── Focus ring ────────────────────────────────────────────────── */
+  --focus-ring: 0 0 0 4px color-mix(in oklab, var(--accent), transparent 65%);
+
+  /* ─── Motion ────────────────────────────────────────────────────── */
+  --motion-fast:   150ms;
+  --motion-base:   220ms;
+  --ease-standard: cubic-bezier(0.28, 0, 0.22, 1);
+
+  /* ─── Layout ────────────────────────────────────────────────────── */
+  --container-max:            1024px;
+  --container-gutter-desktop: 22px;
+  --container-gutter-tablet:  18px;
+  --container-gutter-phone:   16px;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+ * 2 · Stage-local values
+ *     The near-black field is the value named in the brief (#050507);
+ *     ink is the brand surface token, never a new colour.
+ * ───────────────────────────────────────────────────────────────────────── */
+:root {
+  --stage-bg: #050507;
+  --brand-blue: #4d6bfe;
+  --mark-ink: var(--surface);
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--stage-bg);
+  color: var(--surface);
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text",
+    "Helvetica Neue", "Segoe UI", Helvetica, Arial, sans-serif;
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  -webkit-tap-highlight-color: transparent;
+  text-rendering: optimizeLegibility;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px; height: 1px;
+  padding: 0; margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ── Stage ────────────────────────────────────────────────────────────── */
+#stage {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  background: var(--stage-bg);
+}
+
+.stage-inner {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 1920px;
+  height: 1080px;
+  transform: translate(-50%, -50%) scale(1);
+  transform-origin: 50% 50%;
+  background: var(--stage-bg);
+  overflow: hidden;
+  will-change: transform;
+}
+
+#fx {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  z-index: 0;
+}
+
+/* light shaping only: vignette + a barely-there centre lift */
+.stage-inner::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background:
+    radial-gradient(120% 118% at 50% 44%, rgba(5, 5, 7, 0) 38%, rgba(5, 5, 7, 0.66) 100%),
+    radial-gradient(58% 52% at 50% 44%, rgba(245, 245, 247, 0.05), rgba(245, 245, 247, 0) 72%);
+}
+
+.hero {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  transform-origin: 960px 500px;
+  will-change: transform;
+}
+
+/* ── Wordmark ─────────────────────────────────────────────────────────── */
+.mark {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  font-weight: 400;
+  pointer-events: none;
+  opacity: 0;
+  filter: blur(4px) drop-shadow(0 0 0 rgba(245, 245, 247, 0));
+  transform: scale(1.006);
+  transition:
+    opacity 520ms var(--ease-standard),
+    filter 640ms var(--ease-standard),
+    transform 900ms var(--ease-standard);
+}
+
+.is-lit .mark {
+  opacity: 1;
+  filter: blur(0) drop-shadow(0 0 26px rgba(245, 245, 247, 0.18));
+  transform: scale(1);
+}
+
+.mark-svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.mark-svg path {
+  fill: var(--mark-ink);
+  stroke: none;
+  shape-rendering: geometricPrecision;
+}
+
+/* ── Brand lockup: deepseek wordmark + HARNESS chip ───────────────────── */
+.lockup {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 690px;
+  margin: 0;
+  display: flex;
+  justify-content: center;
+  color: var(--surface);
+  opacity: 0;
+  transform: translateY(9px);
+  transition:
+    opacity 720ms var(--ease-standard),
+    transform 720ms var(--ease-standard);
+}
+
+.lockup-svg {
+  display: block;
+  width: 320px;
+  height: auto;
+}
+
+.is-named .lockup {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* ── One breath, then rest ────────────────────────────────────────────── */
+@keyframes hero-breath {
+  0%   { transform: scale(1); }
+  44%  { transform: scale(1.0115); }
+  100% { transform: scale(1); }
+}
+
+.is-breathing .hero {
+  animation: hero-breath 680ms var(--ease-standard) both;
+}
+
+/* ── Chrome ───────────────────────────────────────────────────────────── */
+.chrome {
+  position: fixed;
+  right: max(18px, env(safe-area-inset-right, 0px));
+  bottom: max(14px, env(safe-area-inset-bottom, 0px));
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  opacity: 0;
+  transform: translateY(6px);
+  pointer-events: none;
+  transition:
+    opacity 700ms var(--ease-standard) 120ms,
+    transform 700ms var(--ease-standard) 120ms;
+}
+
+.is-done .chrome {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+}
+
+.ctl {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: color-mix(in oklab, var(--surface) 52%, transparent);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 400;
+  letter-spacing: 0.01em;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 44px;
+  padding: 0 14px;
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+  transition:
+    color 180ms var(--ease-standard),
+    background-color 180ms var(--ease-standard),
+    transform 180ms var(--ease-standard);
+}
+
+.ctl svg {
+  width: 14px;
+  height: 14px;
+  flex: none;
+  display: block;
+}
+
+.ctl svg path {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.ctl-icon { width: 44px; padding: 0; }
+
+.ctl:hover {
+  color: color-mix(in oklab, var(--surface) 92%, transparent);
+  background: color-mix(in oklab, var(--surface) 7%, transparent);
+}
+
+.ctl:active {
+  color: color-mix(in oklab, var(--surface) 96%, transparent);
+  background: color-mix(in oklab, var(--surface) 11%, transparent);
+  transform: scale(0.97);
+}
+
+.ctl:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.ico-shrink { display: none; }
+[aria-pressed="true"] .ico-expand { display: none; }
+[aria-pressed="true"] .ico-shrink { display: block; }
+
+/* instant reset, and poster mode */
+.is-resetting .mark,
+.is-resetting .lockup,
+.is-resetting .chrome,
+.is-still .mark,
+.is-still .lockup,
+.is-still .chrome {
+  transition: none !important;
+  animation: none !important;
+}
+
+/* ── Reduced motion: a wordmark fade, nothing travels ─────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  .mark {
+    filter: none;
+    transform: none;
+    transition: opacity 420ms linear;
+  }
+  .lockup {
+    transform: none;
+    transition: opacity 420ms linear;
+  }
+  .is-breathing .hero { animation: none; }
+
+  .chrome { transform: none; }
+}
+
+@media print {
+  #stage { position: relative; height: 1080px; }
+  .chrome { display: none; }
+}
+</style>
+</head>
+<body>
+
+<main id="stage" data-od-id="dsh-stage" aria-label="DeepSeek Harness 开屏动画">
+  <div class="stage-inner" id="stage-inner">
+    <canvas id="fx" data-od-id="particle-field" aria-hidden="true"></canvas>
+
+    <div class="hero" data-od-id="dsh-hero">
+      <h1 class="mark" data-od-id="dsh-wordmark">
+        <span class="sr-only">DeepSeek</span>
+        <!-- DeepSeek whale mark (Simple Icons, 24 × 24) fitted to 480 px wide at
+             960/460. Particle targets are sampled from this exact filled path. -->
+        <svg class="mark-svg" viewBox="0 0 1920 1080" preserveAspectRatio="xMidYMid meet"
+             aria-hidden="true" focusable="false">
+          <g id="wordmark">
+            <path d="M23.748 4.651c-.254-.124-.364.113-.512.233-.051.04-.094.09-.137.137-.372.397-.806.657-1.373.626-.829-.046-1.537.214-2.163.848-.133-.782-.575-1.248-1.247-1.548-.352-.155-.708-.311-.955-.65-.172-.24-.219-.509-.305-.774-.055-.16-.11-.323-.293-.35-.2-.031-.278.136-.356.276-.313.572-.434 1.202-.422 1.84.027 1.436.633 2.58 1.838 3.393.137.094.172.187.129.323-.082.28-.18.553-.266.833-.055.179-.137.218-.328.14a5.5 5.5 0 0 1-1.737-1.179c-.857-.828-1.631-1.743-2.597-2.46a12 12 0 0 0-.689-.47c-.985-.957.13-1.743.387-1.836.27-.098.094-.433-.778-.428-.872.003-1.67.295-2.687.685a3 3 0 0 1-.465.136 9.6 9.6 0 0 0-2.883-.101c-1.885.21-3.39 1.1-4.497 2.622C.082 8.776-.231 10.854.152 13.02c.403 2.284 1.568 4.175 3.36 5.653 1.857 1.533 3.997 2.284 6.438 2.14 1.482-.085 3.132-.284 4.994-1.86.47.234.962.328 1.78.398.629.058 1.235-.031 1.705-.129.735-.155.684-.836.418-.961-2.155-1.004-1.682-.595-2.112-.926 1.095-1.295 2.768-3.598 3.284-6.733.05-.346.115-.834.108-1.114-.004-.171.035-.238.23-.257a4.2 4.2 0 0 0 1.545-.475c1.397-.763 1.96-2.016 2.093-3.517.02-.23-.004-.467-.247-.588M11.58 18.168c-2.088-1.642-3.101-2.183-3.52-2.16-.39.024-.32.472-.234.763.09.288.207.487.371.74.114.167.192.416-.113.603-.673.416-1.842-.14-1.897-.168-1.361-.801-2.5-1.86-3.301-3.306-.775-1.393-1.225-2.888-1.299-4.482-.02-.385.094-.522.477-.592a4.7 4.7 0 0 1 1.53-.038c2.131.311 3.946 1.264 5.467 2.774.868.86 1.525 1.887 2.202 2.89.72 1.066 1.494 2.082 2.48 2.915.348.291.626.513.892.677-.802.09-2.14.109-3.055-.615zm1.001-6.44a.306.306 0 0 1 .415-.287.3.3 0 0 1 .113.074.3.3 0 0 1 .086.214c0 .17-.136.307-.308.307a.303.303 0 0 1-.306-.307m3.11 1.596c-.2.081-.4.151-.591.16a1.25 1.25 0 0 1-.798-.254c-.274-.23-.47-.358-.551-.758a1.7 1.7 0 0 1 .015-.588c.07-.327-.007-.537-.238-.727-.188-.156-.426-.199-.689-.199a.6.6 0 0 1-.254-.078.253.253 0 0 1-.114-.358 1 1 0 0 1 .192-.21c.356-.202.767-.136 1.146.016.352.144.618.408 1.001.782.392.451.462.576.685.915.176.264.336.536.446.848.066.194-.02.353-.25.45"/>
+          </g>
+        </svg>
+      </h1>
+
+      <div class="lockup" data-od-id="dsh-lockup">
+        <svg class="lockup-svg" viewBox="25.5 0 156 24" role="img" aria-label="DeepSeek Harness" focusable="false"><path d="M68.4157 18.2447H67.0499V16.1272H68.4157C69.2617 16.1272 70.1163 15.9163 70.6668 15.3304C71.2178 14.7444 71.4258 13.8455 71.4258 12.9471C71.4258 12.0487 71.2266 11.1498 70.6668 10.5643C70.1081 9.97831 69.2617 9.76744 68.4157 9.76744C67.5698 9.76744 66.7151 9.97831 66.1636 10.5643C65.6127 11.1503 65.4047 12.0487 65.4047 12.9471V21.6435H63.0088V7.6582H65.4047V8.54883H65.8439C65.8916 8.49393 65.9392 8.44728 65.9873 8.40064C66.5869 7.85353 67.5047 7.6582 68.407 7.6582C69.8209 7.6582 71.2339 8.00998 72.1605 8.98662C73.0866 9.96325 73.4141 11.4632 73.4141 12.9558C73.4141 14.4485 73.0783 15.9406 72.1605 16.925C71.2421 17.9094 69.8209 18.2457 68.4157 18.2457V18.2447Z" fill="#f5f5f7"></path><path d="M31.9549 8.03497H33.3202V10.1525H31.9549C31.1084 10.1525 30.2543 10.3633 29.7033 10.9493C29.1523 11.5353 28.9448 12.4342 28.9448 13.3326C28.9448 14.231 29.1445 15.1294 29.7033 15.7154C30.262 16.3014 31.1084 16.5122 31.9549 16.5122C32.8013 16.5122 33.6559 16.3014 34.2069 15.7154C34.7579 15.1294 34.9654 14.231 34.9654 13.3326V4.62842H37.3608V18.6219H34.9654V17.7313H34.5262C34.4781 17.7857 34.4304 17.8329 34.3823 17.8795C33.7832 18.4261 32.8649 18.6219 31.9626 18.6219C30.5492 18.6219 29.1357 18.2707 28.2096 17.294C27.2835 16.3174 26.9561 14.817 26.9561 13.3248C26.9561 11.8327 27.2913 10.34 28.2096 9.35561C29.1357 8.37898 30.5492 8.03497 31.9549 8.03497Z" fill="#f5f5f7"></path><path d="M49.3784 13.1434V13.9952H42.9982V12.2999H47.2303C47.1345 11.6828 46.911 11.1046 46.5116 10.6824C45.9368 10.0731 45.0501 9.85445 44.1721 9.85445C43.2941 9.85445 42.4074 10.0731 41.8326 10.6824C41.2577 11.2917 41.0498 12.2217 41.0498 13.1439C41.0498 14.0661 41.2573 15.0034 41.8326 15.6049C42.4074 16.2064 43.2936 16.4334 44.1721 16.4334C45.0506 16.4334 45.9368 16.2147 46.5116 15.6049C46.5913 15.5189 46.6632 15.4251 46.7351 15.3314H49.099C48.8915 16.066 48.564 16.7302 48.0689 17.2458C47.1107 18.2535 45.6336 18.6208 44.1721 18.6208C42.7105 18.6208 41.2335 18.2613 40.2753 17.2458C39.3171 16.2303 38.9658 14.6832 38.9658 13.1439C38.9658 11.6046 39.3093 10.0498 40.2753 9.04205C41.2417 8.03432 42.7105 7.66699 44.1721 7.66699C45.6336 7.66699 47.1107 8.02655 48.0689 9.04205C49.0348 10.0576 49.3784 11.6046 49.3784 13.1439V13.1434Z" fill="#f5f5f7"></path><path d="M61.4042 13.1434V13.9952H55.0241V12.2999H59.2561C59.1599 11.6828 58.9369 11.1046 58.5375 10.6824C57.9627 10.0731 57.076 9.85445 56.198 9.85445C55.32 9.85445 54.4332 10.0731 53.8584 10.6824C53.2836 11.2917 53.0757 12.2217 53.0757 13.1439C53.0757 14.0661 53.2831 15.0034 53.8584 15.6049C54.4332 16.2064 55.32 16.4334 56.198 16.4334C57.076 16.4334 57.9627 16.2147 58.5375 15.6049C58.6177 15.5189 58.6891 15.4251 58.7605 15.3314H61.1249C60.9169 16.066 60.5894 16.7302 60.0943 17.2458C59.1361 18.2535 57.659 18.6208 56.198 18.6208C54.7369 18.6208 53.2593 18.2613 52.3012 17.2458C51.343 16.2303 50.9917 14.6832 50.9917 13.1439C50.9917 11.6046 51.3352 10.0498 52.3012 9.04205C53.2676 8.03432 54.7364 7.66699 56.198 7.66699C57.6595 7.66699 59.1361 8.02655 60.0943 9.04205C61.0607 10.0576 61.4042 11.6046 61.4042 13.1439V13.1434Z" fill="#f5f5f7"></path><path d="M80.242 18.6218C81.7035 18.6218 83.1801 18.4109 84.1383 17.8094C85.0965 17.2079 85.4482 16.2934 85.4482 15.3872C85.4482 14.4811 85.1042 13.5589 84.1383 12.9651C83.1801 12.3713 81.703 12.1522 80.242 12.1522C79.6186 12.1522 79.0438 12.0662 78.6366 11.8398C78.2294 11.6051 78.0778 11.2538 78.0778 10.902C78.0778 10.5502 78.2216 10.1912 78.6366 9.96426C79.0438 9.72958 79.6749 9.65184 80.2973 9.65184C80.9198 9.65184 81.5509 9.73784 81.9591 9.96426C82.3663 10.1989 82.5179 10.5502 82.5179 10.902H84.9531C84.9531 9.99536 84.6421 9.07363 83.7719 8.47988C82.9017 7.88613 81.5679 7.66699 80.2424 7.66699C78.9169 7.66699 77.5837 7.87787 76.713 8.47988C75.8427 9.08141 75.5308 9.99536 75.5308 10.902C75.5308 11.8087 75.8423 12.7304 76.713 13.3242C77.5832 13.9179 78.9165 14.1371 80.2424 14.1371C80.929 14.1371 81.688 14.2231 82.1428 14.4495C82.5985 14.6764 82.7579 15.0355 82.7579 15.3872C82.7579 15.739 82.5985 16.0981 82.1428 16.325C81.688 16.5514 80.9931 16.6374 80.3066 16.6374C79.62 16.6374 78.9169 16.5514 78.4694 16.325C78.0224 16.0986 77.8543 15.739 77.8543 15.3872H75.0435C75.0435 16.2939 75.3865 17.2156 76.3534 17.8094C77.3194 18.4031 78.7809 18.6218 80.2424 18.6218H80.242Z" fill="#f5f5f7"></path><path d="M97.4731 13.1434V13.9952H91.0929V12.2999H95.325C95.2298 11.6828 95.0058 11.1046 94.6068 10.6824C94.0311 10.0731 93.1453 9.85445 92.2663 9.85445C91.3874 9.85445 90.5016 10.0731 89.9268 10.6824C89.352 11.2917 89.145 12.2217 89.145 13.1439C89.145 14.0661 89.352 15.0034 89.9268 15.6049C90.5016 16.2064 91.3883 16.4334 92.2663 16.4334C93.1443 16.4334 94.0311 16.2147 94.6068 15.6049C94.686 15.5189 94.7585 15.4251 94.8299 15.3314H97.1932C96.9853 16.066 96.6583 16.7302 96.1636 17.2458C95.2055 18.2535 93.7279 18.6208 92.2663 18.6208C90.8048 18.6208 89.3282 18.2613 88.37 17.2458C87.4118 16.2303 87.061 14.6832 87.061 13.1439C87.061 11.6046 87.4041 10.0498 88.37 9.04205C89.3364 8.03432 90.8058 7.66699 92.2663 7.66699C93.7269 7.66699 95.2055 8.02655 96.1636 9.04205C97.1296 10.0576 97.4726 11.6046 97.4726 13.1439L97.4731 13.1434Z" fill="#f5f5f7"></path><path d="M109.499 13.1434V13.9952H103.119V12.2999H107.351C107.256 11.6828 107.032 11.1046 106.632 10.6824C106.057 10.0731 105.172 9.85445 104.293 9.85445C103.414 9.85445 102.528 10.0731 101.953 10.6824C101.378 11.2917 101.17 12.2217 101.17 13.1439C101.17 14.0661 101.378 15.0034 101.953 15.6049C102.528 16.2064 103.415 16.4334 104.293 16.4334C105.171 16.4334 106.057 16.2147 106.632 15.6049C106.712 15.5189 106.784 15.4251 106.856 15.3314H109.22C109.012 16.066 108.685 16.7302 108.19 17.2458C107.231 18.2535 105.754 18.6208 104.293 18.6208C102.831 18.6208 101.355 18.2613 100.396 17.2458C99.4382 16.2303 99.0864 14.6832 99.0864 13.1439C99.0864 11.6046 99.4295 10.0498 100.396 9.04205C101.362 8.03432 102.832 7.66699 104.293 7.66699C105.754 7.66699 107.231 8.02655 108.19 9.04205C109.156 10.0576 109.499 11.6046 109.499 13.1439V13.1434Z" fill="#f5f5f7"></path><path d="M113.499 4.62842H111.104V18.622H113.499V4.62842Z" fill="#f5f5f7"></path><path d="M117.588 12.8154L121.516 18.6208H118.554L114.625 12.8154L118.554 8.15088H121.516L117.588 12.8154Z" fill="#f5f5f7"></path><rect x="129.348" y="5.5" width="52" height="14" rx="2" fill="#f5f5f7"></rect><g clip-path="url(#harness-logo-chip)"><path d="M132.848 8.9318H134.08V16.1368H132.848V8.9318ZM136.5 8.9318H137.732V16.1368H136.5V8.9318ZM133.365 13.0238V11.9898H137.193V13.0238H133.365Z" fill="#121214"></path><path d="M140.396 14.4318L140.671 13.4528H143.201L143.531 14.4318H140.396ZM140.286 16.1368H139.054L141.276 8.9318H142.2L142.145 9.7458L140.946 13.9148H140.968L140.286 16.1368ZM145.038 16.1368H143.74L143.069 13.9478L143.08 13.9368L141.87 9.7458L141.925 8.9318H142.816L145.038 16.1368Z" fill="#121214"></path><path d="M146.845 8.9318H149.067C149.852 8.9318 150.442 9.11514 150.838 9.48181C151.234 9.84114 151.432 10.3325 151.432 10.9558C151.432 11.2198 151.396 11.4655 151.322 11.6928C151.249 11.9201 151.124 12.1255 150.948 12.3088C150.772 12.4921 150.53 12.6498 150.222 12.7818C149.922 12.9065 149.54 13.0055 149.078 13.0788V13.3208H146.845V12.6388L148.022 12.4848C148.631 12.4041 149.089 12.2978 149.397 12.1658C149.705 12.0338 149.914 11.8761 150.024 11.6928C150.134 11.5021 150.189 11.2931 150.189 11.0658C150.189 10.6991 150.083 10.4168 149.87 10.2188C149.658 10.0208 149.324 9.92181 148.869 9.92181H146.845V8.9318ZM146.394 8.9318H147.626V16.1368H146.394V8.9318ZM151.916 16.0928V16.1368H150.365L149.023 14.3218C148.869 14.1091 148.73 13.9405 148.605 13.8158C148.481 13.6838 148.345 13.5885 148.198 13.5298C148.052 13.4638 147.872 13.4198 147.659 13.3978C147.447 13.3685 147.175 13.3501 146.845 13.3428V13.1448H149.078C149.232 13.2108 149.368 13.2841 149.485 13.3648C149.61 13.4455 149.735 13.5445 149.859 13.6618C149.991 13.7791 150.138 13.9368 150.299 14.1348L151.916 16.0928Z" fill="#121214"></path><path d="M153.58 9.56981L153.591 8.9318H154.46L157.584 15.5098V16.1368H156.704L153.58 9.56981ZM158.024 16.1368H156.968L156.88 8.9318H158.024V16.1368ZM154.24 16.1368H153.096V8.9318H154.152L154.24 16.1368Z" fill="#121214"></path><path d="M159.963 8.9318H161.206V16.1368H159.963V8.9318ZM160.095 9.9658V8.9318H164.858V9.9658H160.095ZM160.095 16.1368V15.1028H164.902V16.1368H160.095ZM160.095 13.0128V11.9898H164.374V13.0128H160.095Z" fill="#121214"></path><path d="M169.052 15.2568C169.543 15.2568 169.895 15.1651 170.108 14.9818C170.328 14.7985 170.438 14.5455 170.438 14.2228C170.438 14.0468 170.405 13.8965 170.339 13.7718C170.273 13.6471 170.152 13.5335 169.976 13.4308C169.807 13.3208 169.558 13.2145 169.228 13.1118L168.491 12.8808C167.846 12.6755 167.38 12.4041 167.094 12.0668C166.808 11.7295 166.665 11.3005 166.665 10.7798C166.665 10.4278 166.76 10.1015 166.951 9.8008C167.142 9.50014 167.428 9.25814 167.809 9.07481C168.19 8.89147 168.663 8.7998 169.228 8.7998C169.631 8.7998 169.998 8.82914 170.328 8.8878C170.665 8.93914 171.039 9.01614 171.45 9.11881L171.274 10.1748C170.834 10.0501 170.442 9.96214 170.097 9.9108C169.76 9.85214 169.463 9.82281 169.206 9.82281C168.737 9.82281 168.403 9.90714 168.205 10.0758C168.007 10.2371 167.908 10.4388 167.908 10.6808C167.908 10.8568 167.941 11.0145 168.007 11.1538C168.073 11.2858 168.19 11.4068 168.359 11.5168C168.535 11.6268 168.784 11.7331 169.107 11.8358L169.866 12.0778C170.526 12.2758 170.995 12.5325 171.274 12.8478C171.553 13.1558 171.692 13.5848 171.692 14.1348C171.692 14.5601 171.589 14.9341 171.384 15.2568C171.179 15.5795 170.878 15.8325 170.482 16.0158C170.093 16.1991 169.609 16.2908 169.03 16.2908C168.627 16.2908 168.212 16.2468 167.787 16.1588C167.362 16.0708 166.9 15.9425 166.401 15.7738L166.665 14.7178C167.156 14.8938 167.6 15.0295 167.996 15.1248C168.399 15.2128 168.751 15.2568 169.052 15.2568Z" fill="#121214"></path><path d="M175.809 15.2568C176.3 15.2568 176.652 15.1651 176.865 14.9818C177.085 14.7985 177.195 14.5455 177.195 14.2228C177.195 14.0468 177.162 13.8965 177.096 13.7718C177.03 13.6471 176.909 13.5335 176.733 13.4308C176.564 13.3208 176.315 13.2145 175.985 13.1118L175.248 12.8808C174.602 12.6755 174.137 12.4041 173.851 12.0668C173.565 11.7295 173.422 11.3005 173.422 10.7798C173.422 10.4278 173.517 10.1015 173.708 9.8008C173.898 9.50014 174.184 9.25814 174.566 9.07481C174.947 8.89147 175.42 8.7998 175.985 8.7998C176.388 8.7998 176.755 8.82914 177.085 8.8878C177.422 8.93914 177.796 9.01614 178.207 9.11881L178.031 10.1748C177.591 10.0501 177.198 9.96214 176.854 9.9108C176.516 9.85214 176.219 9.82281 175.963 9.82281C175.493 9.82281 175.16 9.90714 174.962 10.0758C174.764 10.2371 174.665 10.4388 174.665 10.6808C174.665 10.8568 174.698 11.0145 174.764 11.1538C174.83 11.2858 174.947 11.4068 175.116 11.5168C175.292 11.6268 175.541 11.7331 175.864 11.8358L176.623 12.0778C177.283 12.2758 177.752 12.5325 178.031 12.8478C178.309 13.1558 178.449 13.5848 178.449 14.1348C178.449 14.5601 178.346 14.9341 178.141 15.2568C177.935 15.5795 177.635 15.8325 177.239 16.0158C176.85 16.1991 176.366 16.2908 175.787 16.2908C175.383 16.2908 174.969 16.2468 174.544 16.1588C174.118 16.0708 173.656 15.9425 173.158 15.7738L173.422 14.7178C173.913 14.8938 174.357 15.0295 174.753 15.1248C175.156 15.2128 175.508 15.2568 175.809 15.2568Z" fill="#121214"></path></g><defs><clipPath id="harness-logo-chip"><rect width="46" height="14" fill="white" transform="translate(132.348 5.5)"></rect></clipPath></defs></svg>
+      </div>
+    </div>
+  </div>
+</main>
+
+<div class="chrome" data-od-id="player-controls">
+  <button class="ctl ctl-icon" id="fullscreen" type="button" aria-label="全屏"
+          aria-pressed="false" data-od-id="fullscreen-button">
+    <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+      <path class="ico-expand" d="M6 2.2H2.2V6M10 2.2h3.8V6M13.8 10v3.8H10M6 13.8H2.2V10"/>
+      <path class="ico-shrink" d="M2.2 6H6V2.2M13.8 6H10V2.2M10 13.8V10h3.8M6 13.8V10H2.2"/>
+    </svg>
+  </button>
+  <button class="ctl" id="replay" type="button" data-od-id="replay-button">
+    <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+      <path d="M13.2 6.1A5.4 5.4 0 1 0 13.4 9.9"/>
+      <path d="M13.3 2.4v3.9H9.4"/>
+    </svg>
+    <span>重播</span>
+  </button>
+</div>
+
+<noscript>
+  <style>
+    .mark { opacity: 1; filter: none; transform: none; }
+    .lockup { opacity: 1; transform: none; }
+    .chrome { opacity: 1; transform: none; pointer-events: auto; }
+  </style>
+</noscript>
+
+<script>
+(() => {
+  'use strict';
+
+  /* ══════════════════════════════════════════════════════════════════════
+   * 1 · Tunables — every timing below is in seconds.
+   * ══════════════════════════════════════════════════════════════════════ */
+  const CONFIG = {
+    duration: 5,
+    stage: { w: 1920, h: 1080 },
+    core: { x: 960, y: 460 },        // where light gathers; also the mark centre
+    seed: 20260214,                  // deterministic field, identical on replay
+    particleCount: 640,
+
+    mark: {
+      width: 480,                    // rendered width of the DeepSeek whale, px on the 1920 stage
+      centerX: 960,
+      centerY: 460
+    },
+
+    timeline: {
+      ambientEnd: 1.20,    // drift only
+      mergeEnd: 2.70,      // every trajectory has reached the core
+      crushEnd: 3.00,      // the core compresses to a point
+      flash: 3.05,         // soft bloom peak
+      assembleStart: 3.08, // light leaves the core and writes the mark
+      assembleEnd: 3.66,
+      markIn: 3.60,        // vector mark begins to resolve
+      dustStart: 3.80,     // particles release into dust
+      dustEnd: 4.36,
+      lockup: 3.98,
+      breathe: 4.28,
+      ui: 4.92,
+      end: 5.00
+    },
+
+    look: {
+      trail: 0.07,         // seconds of motion retained behind each point
+      trailSamples: 3
+    }
+  };
+
+  const TL = CONFIG.timeline;
+  const CORE = CONFIG.core;
+  const TAU = Math.PI * 2;
+
+  const root = document.documentElement;
+  const stageInner = document.getElementById('stage-inner');
+  const canvas = document.getElementById('fx');
+  const ctx = canvas.getContext('2d', { alpha: false });
+  const reducedQuery = matchMedia('(prefers-reduced-motion: reduce)');
+  const still = location.hash === '#end' || root.hasAttribute('data-still');
+
+  let reduced = reducedQuery.matches;
+
+  /* ══════════════════════════════════════════════════════════════════════
+   * 2 · Helpers
+   * ══════════════════════════════════════════════════════════════════════ */
+  const clamp01 = v => (v < 0 ? 0 : v > 1 ? 1 : v);
+  const lerp = (a, b, t) => a + (b - a) * t;
+  const easeOutCubic = t => 1 - Math.pow(1 - t, 3);
+  const easeOutQuart = t => 1 - Math.pow(1 - t, 4);
+  const smooth = (a, b, x) => {
+    const t = clamp01((x - a) / (b - a));
+    return t * t * (3 - 2 * t);
+  };
+
+  function mulberry32(a) {
+    return function () {
+      a |= 0; a = (a + 0x6D2B79F5) | 0;
+      let t = Math.imul(a ^ (a >>> 15), 1 | a);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  const css = getComputedStyle(root);
+  const readVar = name => css.getPropertyValue(name).trim();
+
+  function toRGB(hex) {
+    let h = hex.replace('#', '');
+    if (h.length === 3) h = h.split('').map(c => c + c).join('');
+    const n = parseInt(h, 16);
+    return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+  }
+  const mixRGB = (a, b, t) => [
+    Math.round(lerp(a[0], b[0], t)),
+    Math.round(lerp(a[1], b[1], t)),
+    Math.round(lerp(a[2], b[2], t))
+  ];
+  const rgba = (c, a) => `rgba(${c[0]},${c[1]},${c[2]},${a})`;
+
+  const BG = toRGB(readVar('--stage-bg') || '#050507');
+  const INK = toRGB(readVar('--surface') || '#f5f5f7');
+  const ACCENT = toRGB(readVar('--accent') || '#0071e3');
+  const BORDER = toRGB(readVar('--border') || '#d2d2d7');
+  const BG_CSS = `rgb(${BG[0]},${BG[1]},${BG[2]})`;
+  const ICE = mixRGB(INK, ACCENT, 0.13);
+  const BLUE = mixRGB(INK, ACCENT, 0.34);
+
+  /* spectral restraint: white / soft grey / ice / one faint blue glint */
+  const TINTS = [INK, BORDER, ICE, BLUE];
+  const TINT_CSS = TINTS.map(c => `rgb(${c[0]},${c[1]},${c[2]})`);
+
+  /* ══════════════════════════════════════════════════════════════════════
+   * 3 · Brand mark geometry — fit the DeepSeek whale, then sample its fill
+   * ══════════════════════════════════════════════════════════════════════ */
+  const wordmarkGroup = document.getElementById('wordmark');
+  const markPathEl = wordmarkGroup.querySelector('path');
+  const markPath = new Path2D(markPathEl.getAttribute('d'));
+  const markBox = markPathEl.getBBox();
+
+  const MARK_K = CONFIG.mark.width / markBox.width;
+  const MARK_X = CONFIG.mark.centerX - (markBox.x + markBox.width / 2) * MARK_K;
+  const MARK_Y = CONFIG.mark.centerY - (markBox.y + markBox.height / 2) * MARK_K;
+  const VX0 = markBox.x;
+  const VX1 = markBox.x + markBox.width;
+
+  wordmarkGroup.setAttribute('transform',
+    `translate(${MARK_X.toFixed(3)} ${MARK_Y.toFixed(3)}) scale(${MARK_K.toFixed(4)})`);
+
+  /* Every particle gets a target inside the real filled mark (plus a light
+     outline trace), so the particle drawing and the final vector whale
+     register exactly. */
+  const targets = [];
+  (function sampleTargets() {
+    const rasterScale = 0.5;
+    const w = Math.round(CONFIG.stage.w * rasterScale);
+    const h = Math.round(CONFIG.stage.h * rasterScale);
+    const probe = document.createElement('canvas');
+    probe.width = w;
+    probe.height = h;
+    const pctx = probe.getContext('2d');
+    pctx.setTransform(
+      MARK_K * rasterScale, 0, 0, MARK_K * rasterScale,
+      MARK_X * rasterScale, MARK_Y * rasterScale
+    );
+    pctx.fillStyle = '#fff';
+    pctx.fill(markPath);
+    const pixels = pctx.getImageData(0, 0, w, h).data;
+
+    const pool = [];
+    for (let y = 0; y < h; y += 2) {
+      for (let x = 0; x < w; x += 2) {
+        if (pixels[(y * w + x) * 4 + 3] > 128) {
+          pool.push({ x: x / rasterScale, y: y / rasterScale });
+        }
+      }
+    }
+
+    const outlineLength = markPathEl.getTotalLength();
+    const traceCount = Math.round(CONFIG.particleCount * 0.3);
+    for (let i = 0; i < traceCount; i++) {
+      const pt = markPathEl.getPointAtLength(((i + 0.5) / traceCount) * outlineLength);
+      pool.push({ x: MARK_X + pt.x * MARK_K, y: MARK_Y + pt.y * MARK_K });
+    }
+
+    const pick = mulberry32(CONFIG.seed ^ 0x9e3779b9);
+    for (let i = pool.length - 1; i > 0; i--) {
+      const j = Math.floor(pick() * (i + 1));
+      const tmp = pool[i];
+      pool[i] = pool[j];
+      pool[j] = tmp;
+    }
+    for (let i = 0; i < CONFIG.particleCount; i++) {
+      const pt = pool[i % pool.length];
+      targets.push({
+        x: pt.x,
+        y: pt.y,
+        lx: (pt.x - MARK_X) / MARK_K,
+        ly: (pt.y - MARK_Y) / MARK_K
+      });
+    }
+  })();
+
+  /* ══════════════════════════════════════════════════════════════════════
+   * 4 · Particle sprites — soft light, never neon
+   * ══════════════════════════════════════════════════════════════════════ */
+  const SPRITE_PX = 128;
+  const SPRITE_SPEC = {
+    0: { box: 3.6, stops: [[0, 1], [0.14, 0.96], [0.34, 0.5], [0.6, 0.14], [0.82, 0.03], [1, 0]] },
+    1: { box: 2.9, stops: [[0, 0.92], [0.2, 0.66], [0.45, 0.3], [0.72, 0.08], [1, 0]] },
+    2: { box: 1.55, stops: [[0, 0.55], [0.4, 0.48], [0.7, 0.26], [0.9, 0.05], [1, 0]] }
+  };
+  const SPRITE_BOX = [SPRITE_SPEC[0].box, SPRITE_SPEC[1].box, SPRITE_SPEC[2].box];
+
+  function makeSprite(color, key) {
+    const c = document.createElement('canvas');
+    c.width = c.height = SPRITE_PX;
+    const g = c.getContext('2d');
+    const grd = g.createRadialGradient(SPRITE_PX / 2, SPRITE_PX / 2, 0,
+      SPRITE_PX / 2, SPRITE_PX / 2, SPRITE_PX / 2);
+    for (const [stop, alpha] of SPRITE_SPEC[key].stops) {
+      grd.addColorStop(stop, rgba(color, alpha));
+    }
+    g.fillStyle = grd;
+    g.fillRect(0, 0, SPRITE_PX, SPRITE_PX);
+    return c;
+  }
+
+  const sprites = TINTS.map(color => [
+    makeSprite(color, 0), makeSprite(color, 1), makeSprite(color, 2)
+  ]);
+
+  /* ══════════════════════════════════════════════════════════════════════
+   * 5 · Build the field
+   * ══════════════════════════════════════════════════════════════════════ */
+  const rng = mulberry32(CONFIG.seed);
+  const parts = [];
+
+  for (let i = 0; i < CONFIG.particleCount; i++) {
+    const tgt = targets[i % targets.length];
+
+    /* depth strata: far dust, mid points, a few near bokeh */
+    const roll = rng();
+    let depth, size, baseAlpha, softLevel;
+    if (roll < 0.55) {
+      depth = 0.10 + rng() * 0.25;
+      size = 0.55 + rng() * 0.55;
+      baseAlpha = 0.17 + rng() * 0.20;
+      softLevel = 1;
+    } else if (roll < 0.90) {
+      depth = 0.40 + rng() * 0.30;
+      size = 0.95 + rng() * 1.05;
+      baseAlpha = 0.24 + rng() * 0.24;
+      softLevel = 1;
+    } else {
+      depth = 0.72 + rng() * 0.28;
+      size = 2.1 + rng() * 2.9;
+      baseAlpha = 0.07 + rng() * 0.09;
+      softLevel = 2;
+    }
+
+    const ang = rng() * TAU;
+    const rad = Math.pow(rng(), 1.35);
+    const bx = CORE.x + Math.cos(ang) * rad * 940;
+    const by = CORE.y + Math.sin(ang) * rad * 500;
+
+    const tint = rng() < 0.68 ? 0 : rng() < 0.74 ? 1 : rng() < 0.88 ? 2 : 3;
+    const swirl = 0.22 + (rng() * 2 - 1) * 0.85;
+    const coreR = 2 + Math.pow(rng(), 0.75) * 24;
+
+    /* assembly delay follows the target's x so light writes left to right */
+    const ad = 0.02 + ((tgt.lx - VX0) / (VX1 - VX0)) * 0.10 + rng() * 0.02;
+    const dustAng = Math.atan2(tgt.y - CORE.y, (tgt.x - CORE.x) * 0.9) + (rng() - 0.5) * 0.9;
+    const dustSp = 26 + rng() * 62;
+
+    parts.push({
+      bx, by, depth, size, baseAlpha, softLevel, tint,
+      tw: 0.35 + rng() * 0.95,
+      twp: rng() * TAU,
+      rate: 0.55 + depth * 0.85,
+      ax: (6 + rng() * 26) * (0.4 + depth),
+      ay: (5 + rng() * 22) * (0.4 + depth),
+      w1: 0.16 + rng() * 0.26,
+      w2: 0.34 + rng() * 0.5,
+      w3: 0.14 + rng() * 0.24,
+      w4: 0.3 + rng() * 0.45,
+      ph1: rng() * TAU, ph2: rng() * TAU, ph3: rng() * TAU, ph4: rng() * TAU,
+
+      delay: Math.pow(rng(), 1.7) * 0.18,
+      arrive: TL.mergeEnd - 0.30 + rng() * 0.30,
+      swirl,
+      coreR,
+      coreA: rng() * TAU,
+
+      tx: tgt.x, ty: tgt.y,
+      ad,
+      arc: 9 + rng() * 20,
+      ms: 1.75 + rng() * 0.85,
+
+      dx: Math.cos(dustAng) * dustSp,
+      dy: Math.sin(dustAng) * dustSp * 0.7 - 22,
+      trail: rng() < 0.78
+    });
+  }
+
+  /* ══════════════════════════════════════════════════════════════════════
+   * 6 · Trajectory — a pure function of time, so replay is exact
+   * ══════════════════════════════════════════════════════════════════════ */
+  const tmpA = { x: 0, y: 0 };
+  const HEAD = { x: 0, y: 0 };
+  const TAIL = { x: 0, y: 0 };
+  const MID = { x: 0, y: 0 };
+  const LOOK = { a: 0, s: 0, l: 0 };
+
+  function ambientAt(p, t, out) {
+    const tz = t * p.rate;
+    const dx = Math.sin(tz * p.w1 + p.ph1) * p.ax
+             + Math.sin(tz * p.w2 + p.ph2) * p.ax * 0.35;
+    const dy = Math.cos(tz * p.w3 + p.ph3) * p.ay
+             + Math.sin(tz * p.w4 + p.ph4) * p.ay * 0.30;
+    const rot = t * 0.012;
+    const c = Math.cos(rot), s = Math.sin(rot);
+    const x = p.bx - CORE.x + dx;
+    const y = p.by - CORE.y + dy;
+    out.x = CORE.x + x * c - y * s;
+    out.y = CORE.y + x * s + y * c;
+    return out;
+  }
+
+  function positionAt(p, t, out) {
+    if (t <= TL.ambientEnd) return ambientAt(p, Math.max(0, t), out);
+
+    /* the compressed core, shrinking to nothing by crushEnd */
+    const crush = smooth(2.60, TL.crushEnd, t);
+    const cr = p.coreR * (1 - crush);
+    const ca = p.coreA + t * 0.85;
+    const cx = CORE.x + Math.cos(ca) * cr;
+    const cy = CORE.y + Math.sin(ca) * cr;
+
+    if (t < TL.assembleStart) {
+      const q = clamp01((t - TL.ambientEnd - p.delay) /
+        (p.arrive - TL.ambientEnd - p.delay));
+      ambientAt(p, t, tmpA);
+      const phi = p.swirl * Math.pow(q, 1.4);
+      const c = Math.cos(phi), s = Math.sin(phi);
+      const dx = tmpA.x - CORE.x;
+      const dy = tmpA.y - CORE.y;
+      const shrink = 1 - Math.pow(q, 2.2);
+      out.x = cx + (dx * c - dy * s) * shrink;
+      out.y = cy + (dx * s + dy * c) * shrink;
+      return out;
+    }
+
+    /* assembly: core → letter, along one coherent vortex */
+    const span = TL.assembleEnd - TL.assembleStart;
+    const a = clamp01((t - TL.assembleStart - p.ad) / (span - p.ad));
+    const e = easeOutQuart(a);
+    let x = cx + (p.tx - cx) * e;
+    let y = cy + (p.ty - cy) * e;
+
+    const vx = -(p.ty - CORE.y);
+    const vy = (p.tx - CORE.x);
+    const vl = Math.hypot(vx, vy) || 1;
+    const arc = Math.sin(Math.PI * a) * p.arc;
+    x += (vx / vl) * arc;
+    y += (vy / vl) * arc;
+
+    if (t > TL.dustStart) {
+      const d = clamp01((t - TL.dustStart) / (TL.dustEnd - TL.dustStart));
+      const de = easeOutCubic(d);
+      x += p.dx * de + Math.sin(d * 4 + p.ph1) * 5 * d;
+      y += p.dy * de;
+    }
+
+    out.x = x;
+    out.y = y;
+    return out;
+  }
+
+  function lookAt(p, t) {
+    const twinkle = 0.82 + 0.18 * Math.sin(t * p.tw + p.twp);
+    let a = p.baseAlpha * twinkle * smooth(0, 0.42, t);
+    let s = p.size;
+    let l = p.softLevel;
+
+    if (t > TL.ambientEnd) {
+      const q = clamp01((t - TL.ambientEnd - p.delay) /
+        (p.arrive - TL.ambientEnd - p.delay));
+      const qe = Math.pow(q, 1.35);
+      a = lerp(a, 0.92, qe);
+      s = lerp(s, 1.5, qe);
+      if (q > 0.5) l = 0;
+    }
+
+    if (t > TL.assembleStart) {
+      const span = TL.assembleEnd - TL.assembleStart;
+      const as = clamp01((t - TL.assembleStart - p.ad) / (span - p.ad));
+      const ae = easeOutCubic(as);
+      a = lerp(a, 0.95, ae);
+      s = lerp(s, p.ms, ae);
+      l = 0;
+      if (t > TL.dustStart) {
+        const d = clamp01((t - TL.dustStart) / (TL.dustEnd - TL.dustStart));
+        a *= 1 - smooth(0, 1, d);
+        s *= 1 - 0.35 * d;
+      }
+    }
+
+    LOOK.a = a;
+    LOOK.s = s;
+    LOOK.l = l;
+  }
+
+  /* ══════════════════════════════════════════════════════════════════════
+   * 7 · Render
+   * ══════════════════════════════════════════════════════════════════════ */
+  let renderScale = 1;
+
+  function bloomAt(t) {
+    const gather = smooth(1.90, 2.95, t) * 0.20;
+    const pulse = Math.exp(-Math.pow((t - TL.flash) / 0.11, 2)) * 0.58;
+    const fade = 1 - smooth(3.45, 4.42, t);
+    return {
+      a: (gather + pulse) * fade,
+      r: 150 + 420 * smooth(1.90, TL.flash, t) + 260 * smooth(TL.flash, 3.90, t)
+    };
+  }
+
+  function drawBloom(a, r) {
+    if (r < 1) return;
+    const g = ctx.createRadialGradient(CORE.x, CORE.y, 0, CORE.x, CORE.y, r);
+    g.addColorStop(0, rgba(INK, a));
+    g.addColorStop(0.10, rgba(INK, a * 0.70));
+    g.addColorStop(0.30, rgba(ICE, a * 0.22));
+    g.addColorStop(0.62, rgba(BLUE, a * 0.06));
+    g.addColorStop(1, rgba(BLUE, 0));
+    ctx.fillStyle = g;
+    ctx.fillRect(CORE.x - r, CORE.y - r, r * 2, r * 2);
+  }
+
+  function clearCanvas() {
+    ctx.setTransform(renderScale, 0, 0, renderScale, 0, 0);
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.globalAlpha = 1;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.fillStyle = BG_CSS;
+    ctx.fillRect(0, 0, CONFIG.stage.w, CONFIG.stage.h);
+  }
+
+  function draw(t) {
+    clearCanvas();
+    if (t >= TL.end - 0.004) return;   // at rest the mark is vector, not light
+
+    ctx.globalCompositeOperation = 'lighter';
+
+    const bloom = bloomAt(t);
+    if (bloom.a > 0.003) drawBloom(bloom.a, bloom.r);
+
+    const trailOn = t > TL.ambientEnd + 0.02 && t < TL.dustEnd;
+
+    for (let i = 0; i < parts.length; i++) {
+      const p = parts[i];
+      positionAt(p, t, HEAD);
+      lookAt(p, t);
+
+      const a = LOOK.a;
+      if (a <= 0.004) continue;
+      const s = LOOK.s;
+      const box = s * SPRITE_BOX[LOOK.l];
+
+      if (trailOn && p.trail) {
+        const tailT = Math.max(TL.ambientEnd, t - CONFIG.look.trail);
+        positionAt(p, tailT, TAIL);
+        const tdx = HEAD.x - TAIL.x;
+        const tdy = HEAD.y - TAIL.y;
+        if (tdx * tdx + tdy * tdy > 5) {
+          ctx.globalAlpha = a * 0.30;
+          ctx.strokeStyle = TINT_CSS[p.tint];
+          ctx.lineWidth = Math.max(0.55, s * 0.55);
+          ctx.beginPath();
+          ctx.moveTo(TAIL.x, TAIL.y);
+          const n = CONFIG.look.trailSamples;
+          for (let k = n; k >= 1; k--) {
+            positionAt(p, tailT + (t - tailT) * (1 - k / (n + 1)), MID);
+            ctx.lineTo(MID.x, MID.y);
+          }
+          ctx.lineTo(HEAD.x, HEAD.y);
+          ctx.stroke();
+        }
+      }
+
+      ctx.globalAlpha = a;
+      ctx.drawImage(sprites[p.tint][LOOK.l], HEAD.x - box / 2, HEAD.y - box / 2, box, box);
+    }
+
+    ctx.globalAlpha = 1;
+    ctx.globalCompositeOperation = 'source-over';
+  }
+
+  /* ══════════════════════════════════════════════════════════════════════
+   * 8 · Clock, class cues, lifecycle
+   * ══════════════════════════════════════════════════════════════════════ */
+  const flags = { lit: false, named: false, breath: false, done: false };
+  let raf = 0;
+  let t0 = 0;
+  let frozen = false;
+  let hiddenAt = 0;
+
+  function syncCues(t) {
+    if (!flags.lit && t >= TL.markIn) {
+      flags.lit = true;
+      root.classList.add('is-lit');
+    }
+    if (!flags.named && t >= TL.lockup) {
+      flags.named = true;
+      root.classList.add('is-named');
+    }
+    if (!flags.breath && t >= TL.breathe) {
+      flags.breath = true;
+      root.classList.add('is-breathing');
+    }
+    if (!flags.done && t >= TL.ui) {
+      flags.done = true;
+      root.classList.add('is-done');
+    }
+  }
+
+  function tick(now) {
+    const t = Math.min(TL.end, (now - t0) / 1000);
+    draw(t);
+    syncCues(t);
+    if (t >= TL.end) {
+      frozen = true;
+      raf = 0;
+      return;
+    }
+    raf = requestAnimationFrame(tick);
+  }
+
+  function resize() {
+    const s = Math.min(window.innerWidth / CONFIG.stage.w,
+      window.innerHeight / CONFIG.stage.h);
+    stageInner.style.transform = `translate(-50%, -50%) scale(${s})`;
+
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    renderScale = Math.min(Math.max(s * dpr, 1), 2.25);
+
+    const w = Math.round(CONFIG.stage.w * renderScale);
+    const h = Math.round(CONFIG.stage.h * renderScale);
+    if (canvas.width !== w || canvas.height !== h) {
+      canvas.width = w;
+      canvas.height = h;
+      if (frozen) clearCanvas();
+    }
+  }
+
+  function showStatic(instant) {
+    if (raf) { cancelAnimationFrame(raf); raf = 0; }
+    frozen = true;
+    clearCanvas();
+    if (instant) root.classList.add('is-still');
+    root.classList.add('is-lit', 'is-named', 'is-done');
+  }
+
+  function replay() {
+    if (raf) { cancelAnimationFrame(raf); raf = 0; }
+    frozen = false;
+
+    root.classList.add('is-resetting');
+    root.classList.remove('is-lit', 'is-named', 'is-breathing', 'is-done');
+    void root.offsetWidth;
+    root.classList.remove('is-resetting');
+
+    flags.lit = flags.named = flags.breath = flags.done = false;
+
+    if (still) { showStatic(true); return; }
+    if (reduced) {
+      clearCanvas();
+      root.classList.remove('is-lit', 'is-named', 'is-done');
+      void root.offsetWidth;
+      root.classList.add('is-lit', 'is-named', 'is-done');
+      frozen = true;
+      return;
+    }
+
+    clearCanvas();
+    t0 = performance.now();
+    raf = requestAnimationFrame(tick);
+  }
+
+  async function toggleFullscreen() {
+    try {
+      if (document.fullscreenElement) await document.exitFullscreen();
+      else await document.documentElement.requestFullscreen();
+    } catch (err) {
+      console.warn('Fullscreen is unavailable here.', err);
+    }
+  }
+
+  document.getElementById('replay').addEventListener('click', replay);
+  document.getElementById('fullscreen').addEventListener('click', toggleFullscreen);
+
+  document.addEventListener('fullscreenchange', () => {
+    document.getElementById('fullscreen')
+      .setAttribute('aria-pressed', String(Boolean(document.fullscreenElement)));
+    requestAnimationFrame(resize);
+  });
+
+  document.addEventListener('keydown', (e) => {
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    if (e.key === 'r' || e.key === 'R') replay();
+    if (e.key === 'f' || e.key === 'F') toggleFullscreen();
+  });
+
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+      hiddenAt = performance.now();
+    } else if (hiddenAt) {
+      t0 += performance.now() - hiddenAt;
+      hiddenAt = 0;
+    }
+  });
+
+  let resizeQueued = 0;
+  window.addEventListener('resize', () => {
+    cancelAnimationFrame(resizeQueued);
+    resizeQueued = requestAnimationFrame(resize);
+  });
+  window.addEventListener('orientationchange', () => requestAnimationFrame(resize));
+
+  const onReducedChange = (e) => {
+    reduced = e.matches;
+    if (reduced) showStatic(false);
+    else replay();
+  };
+  if (reducedQuery.addEventListener) reducedQuery.addEventListener('change', onReducedChange);
+  else if (reducedQuery.addListener) reducedQuery.addListener(onReducedChange);
+
+  /* ══════════════════════════════════════════════════════════════════════
+   * 9 · Start
+   * ══════════════════════════════════════════════════════════════════════ */
+  resize();
+
+  if (still || reduced) {
+    showStatic(still);
+  } else {
+    clearCanvas();
+    t0 = performance.now();
+    raf = requestAnimationFrame(tick);
+  }
+})();
+</script>
+</body>
+</html>

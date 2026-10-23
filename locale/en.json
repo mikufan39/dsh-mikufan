@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Mikufan",
+    "description": "Six features: Delete-sessions (mark a session for physical deletion on the next Harness startup), Startup animation (a five-second gathering-light splash on Web UI boot), Local memory (a per-machine long-term memory the agent reaches through memory_* tools), LAN access (a second, no-token listener for phones — the dsh-lan-access engine, integrated; off on every launch until manually enabled), Skills (manage ~/.dsh/skills with name/description search; New skill, the card's 打开 and 立即试用 open a new session whose composer holds only the matching /skill-name reference, while the detail overlay renders SKILL.md with reveal and copy actions), and Agent (one text box editing the user-global ~/.dsh/AGENTS.md the Harness loads for every project; Save writes the file and blank text removes it, while project-level AGENTS.md files still apply). The sidebar Control panel (dashboard / memory / LAN access / Skills / Agent / MCP) is the management hub."
+  }
+}
