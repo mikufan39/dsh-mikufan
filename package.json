@@ -1,9 +1,9 @@
 {
   "name": "dsh-mikufan",
-  "version": "0.10.2",
+  "version": "0.10.3",
   "private": true,
   "license": "MIT",
-  "description": "Mikufan tools for DeepSeek Harness. Feature 1: Delete-sessions — mark a session for deletion from its \"...\" menu and have the Harness physically delete it on the next startup. Feature 2: Startup animation — cover the Web UI's boot with the five-second \"gathering light\" splash. Feature 3: Local memory — a per-machine long-term memory the agent reaches through memory_* tools, managed as a card grid with a create/edit dialog. Feature 4: LAN access — a second, no-token reverse-proxy listener for phones (integrated from the superseded dsh-lan-access bundle), configured as four cards (switch, device cap, IP address, port); the switch starts off on every launch and must be enabled manually. Feature 5: Skills — manage the user skill root (~/.dsh/skills) as cards with a name/description search, an enable switch, a detail overlay (reveal / copy actions) and a bundled skill-creator; the new-skill card, the card's 打开 and 立即试用 open a new session whose composer holds only the `/skill-creator` or `/name` skill reference. Feature 6: Agent — one text box editing the user-global instruction file the Harness loads for every project (~/.dsh/AGENTS.md); Save writes it and blank text removes it. The sidebar Control panel (dashboard / memory / LAN access / Skills / Agent / MCP) is the management hub: every feature switch, the memory manager, the LAN manager, the skill manager and the global AGENTS.md editor live here.",
+  "description": "Mikufan tools for DeepSeek Harness: delete marked sessions on the next startup, a five-second startup splash, local long-term memory, a no-token LAN access proxy that stays off on every launch, a skills manager with a bundled skill-creator, and an editor for the user-global ~/.dsh/AGENTS.md — all managed from the sidebar Control panel.",
   "type": "module",
   "icon": "./icon.jpg",
   "exports": {
