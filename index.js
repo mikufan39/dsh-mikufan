@@ -98,6 +98,7 @@ import {
   listSkills,
   readSkill,
   removeSkill,
+  restoreBundledSkill,
   setSkillEnabled,
   SKILLS_DIR_NAME,
 } from './skills.js';
@@ -758,6 +759,10 @@ function publicSkill(detail) {
  * - `DELETE <prefix>/skills/<id>` → removes the bundle or flat file
  * - `POST <prefix>/skills/<id>/reveal` → reveals SKILL.md in the file manager
  * - `POST <prefix>/skills/ensure` → recreates the root and the bundled skill
+ *   (one-shot: the install marker keeps a removal permanent)
+ * - `POST <prefix>/skills/restore` → puts the bundled skill back when its
+ *   directory is missing, ignoring that marker (the Skills page calls it on
+ *   every open; an existing copy is never overwritten)
  * - `GET  <prefix>/agent` → `{ path, exists, content }` (the user-global
  *   `<DSH home>/AGENTS.md`)
  * - `POST <prefix>/agent` `{content}` → writes that file; blank content removes
@@ -1017,6 +1022,22 @@ function createRouteHandler({ ctx, store, preferences, memory, lan, skillsRoot, 
         }
         await mkdir(skillsRoot, { recursive: true });
         envelope(res, 200, { root: skillsRoot, entries: await listSkills(skillsRoot) });
+        return;
+      }
+      if (action === 'skills/restore' && req.method === 'POST') {
+        if (skillsRoot === undefined) {
+          envelope(res, 503, undefined, { code: 'unavailable', message: 'the skills root is unavailable' });
+          return;
+        }
+        await mkdir(skillsRoot, { recursive: true });
+        const installed = await restoreBundledSkill(
+          bundledSkillDirectory(),
+          skillsRoot,
+          'skill-creator',
+          log,
+          bundledMarkerFile,
+        );
+        envelope(res, 200, { root: skillsRoot, installed, entries: await listSkills(skillsRoot) });
         return;
       }
       if (action === 'skills/ensure' && req.method === 'POST') {

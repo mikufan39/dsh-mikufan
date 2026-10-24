@@ -9,6 +9,9 @@
  * - The root is created on first run; DSH ships no skills folder.
  * - The plugin bundles one skill (`skill-creator`) and installs it into the
  *   root only when that directory is absent, so a user edit is never lost.
+ *   The start-up install is one-shot (the marker file records it), while
+ *   `restoreBundledSkill` puts the same bundle back whenever the Skills page
+ *   finds the directory missing — the built-in create-skill flow depends on it.
  * - A skill's `disable-model-invocation: true` flag is the card switch: on
  *   means the model sees the skill, off keeps it on disk but out of the
  *   model-facing catalog.
@@ -254,6 +257,61 @@ export async function installBundledSkill(sourceDir, root, name, log, markerFile
   await writeInstallMarker(markerFile, name).catch(() => {});
   log(`installed bundled skill ${name} → ${target}`);
   return true;
+}
+
+/** In-flight restores, keyed by target, so concurrent page opens copy once. */
+const restoresInFlight = new Map();
+
+/**
+ * Restore one bundled skill into the managed root when its directory is
+ * missing, ignoring the install marker.
+ *
+ * The marker keeps the *start-up* install one-shot, so a removal made on
+ * purpose stays removed across restarts. The Skills page however needs its
+ * bundled `skill-creator` — the create-skill card opens a `/skill-creator`
+ * session — so opening that page calls this repair path explicitly. An
+ * existing directory is never touched (a user edit survives), and the copy is
+ * staged next to the root and renamed into place, so a failed copy cannot
+ * leave a half-written skill that later looks installed.
+ *
+ * @param sourceDir - absolute path of the bundled skill inside this package.
+ * @param root - managed skill root.
+ * @param name - the skill's directory name.
+ * @param log - reporter.
+ * @param markerFile - optional absolute path of the install-marker JSON.
+ * @returns whether a copy was made.
+ */
+export async function restoreBundledSkill(sourceDir, root, name, log, markerFile) {
+  const target = join(root, name);
+  if (await pathExists(target)) {
+    await writeInstallMarker(markerFile, name).catch(() => {});
+    return false;
+  }
+  // Two page opens (or two tabs) must not race into the same target.
+  const pending = restoresInFlight.get(target);
+  if (pending !== undefined) return pending;
+  const work = (async () => {
+    try {
+      if (await pathExists(target)) return false;
+      const staging = join(dirname(root), `.mikufan-restore-${name}-${process.pid}-${Date.now()}`);
+      try {
+        await cp(sourceDir, staging, { recursive: true, force: false, errorOnExist: false });
+        await rename(staging, target);
+      } catch (error) {
+        await rm(staging, { recursive: true, force: true }).catch(() => {});
+        // Another writer won the race: its copy is as good as ours.
+        if (await pathExists(target)) return false;
+        throw error;
+      }
+      await writeInstallMarker(markerFile, name).catch(() => {});
+      log(`restored bundled skill ${name} → ${target}`);
+      return true;
+    } finally {
+      restoresInFlight.delete(target);
+    }
+  })();
+  restoresInFlight.set(target, work);
+  return work;
 }
 
 /** Read the install marker (`{ <skill>: iso }`); any failure is an empty marker. */

@@ -196,6 +196,7 @@ window.__ModuleLoader__.load({
         'skills.disable': '停用',
         'skills.enabled.switch': '{action}技能：{name}',
         'skills.create.failed': '无法打开新会话，请手动新建会话并输入 /skill-creator。',
+        'skills.restore.notice': '已恢复内置技能 skill-creator',
         'skills.openSession.failed': '无法打开新会话，请手动新建会话并输入 /{name}。',
         'skills.detail.loading': '读取 SKILL.md…',
         'skills.detail.error': '读取 SKILL.md 失败：{message}',
@@ -423,6 +424,7 @@ window.__ModuleLoader__.load({
         'skills.disable': 'Disable',
         'skills.enabled.switch': '{action} skill: {name}',
         'skills.create.failed': 'Could not open a new session — start one and type /skill-creator.',
+        'skills.restore.notice': 'Restored the bundled skill-creator',
         'skills.openSession.failed': 'Could not open a new session — start one and type /{name}.',
         'skills.detail.loading': 'Reading SKILL.md…',
         'skills.detail.error': 'Could not read SKILL.md: {message}',
@@ -1355,6 +1357,15 @@ window.__ModuleLoader__.load({
     /** Ensure the root and the bundled skill-creator exist; returns the host list. */
     async function ensureBundledSkill() {
       return callHost('skills/ensure', { method: 'POST', headers: { accept: 'application/json' } });
+    }
+
+    /**
+     * Put the bundled skill-creator back when its directory is gone. The create
+     * card opens a `/skill-creator` session, so the Skills page repairs the
+     * skill on every open; the Host never overwrites an existing copy.
+     */
+    async function restoreBundledSkill() {
+      return callHost('skills/restore', { method: 'POST', headers: { accept: 'application/json' } });
     }
 
     /** Reveal one SKILL.md in the platform file manager. */
@@ -4389,6 +4400,15 @@ window.__ModuleLoader__.load({
 
       useEffect(() => {
         hydrateSkills();
+        // The bundled skill-creator powers the create card: repair it whenever
+        // this page opens. The Host copies only when the directory is missing.
+        void restoreBundledSkill()
+          .then((value) => {
+            if (value?.installed !== true) return undefined;
+            setNotice(translate('skills.restore.notice', '已恢复内置技能 skill-creator'));
+            return adoptHostSkills();
+          })
+          .catch(() => {});
       }, []);
 
       const detailEntry = detailId === null ? null : (entries.find((entry) => entry.id === detailId) ?? null);
