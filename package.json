@@ -1,9 +1,9 @@
 {
   "name": "dsh-mikufan",
-  "version": "0.12.1",
+  "version": "1.0.0",
   "private": true,
   "license": "MIT",
-  "description": "Mikufan tools for DeepSeek Harness: delete marked sessions (and their subagent sessions) on the next startup, a five-second startup splash, local long-term memory, a no-token LAN access proxy that stays off on every launch, a skills manager with a bundled skill-creator, an editor for the user-global ~/.dsh/AGENTS.md, and an MCP server manager in the OpenAI ChatGPT/Codex mcp_servers format — all managed from the sidebar Control panel.",
+  "description": "魔法未来为dsh增加/强化了几个功能：删除会话、启动动画、记忆、局域网访问、Skills管理、Agent自定义和MCP管理。",
   "type": "module",
   "icon": "./icon.jpg",
   "exports": {

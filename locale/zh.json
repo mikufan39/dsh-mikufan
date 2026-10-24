@@ -1,6 +1,6 @@
 {
   "meta": {
     "title": "MAGICAL MIRAI",
-    "description": "六个内置功能：删除会话（标记后下次启动删除）、开机动画、本地长期记忆、局域网访问（每次启动默认关闭，需手动开启）、Skills（含内置 skill-creator）、Agent（编辑用户全局 ~/.dsh/AGENTS.md）。侧栏「控制面板」是管理中枢。"
+    "description": "魔法未来为dsh增加/强化了几个功能：删除会话、启动动画、记忆、局域网访问、Skills管理、Agent自定义和MCP管理。"
   }
 }
