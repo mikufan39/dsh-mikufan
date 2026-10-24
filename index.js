@@ -6,6 +6,12 @@
  * 1. Startup sweep: every session marked for deletion is physically removed at
  *    Harness startup — its session log directory, its projection-cache file and
  *    its registry references. A live (in-process) session is never touched.
+ *    The sweep also takes the marked session's subagent sessions with it:
+ *    the `sessionQuery` service's `parentSession` headers reveal the subagent
+ *    tree, and every discovered descendant is deleted through the same
+ *    liveness fence right after its parent. A failed descendant deletion is
+ *    marked for the next startup, riding the same durable retry path as a
+ *    user-made mark; the user's own marked set is never inflated by it.
  * 2. Release on continued conversation: a user message committed to a marked
  *    session cancels its mark, so "keep talking" and "delete me" cannot both be
  *    pending.
@@ -39,6 +45,11 @@
  * instruction file the Harness loads for every project
  * (`<DSH home>/AGENTS.md`). `<prefix>/agent` reads and writes that one file;
  * blank text removes it. Project-level `AGENTS.md` files still apply.
+ *
+ * Component 7, "MCP" (`mcp.js`): the MCP page manages the OpenAI ChatGPT /
+ * Codex `mcp_servers.<name>` configuration (stdio / streamable_http) in
+ * `<DSH home>/dsh-mikufan/mcp.json`; `<prefix>/mcp…` lists, creates, edits,
+ * enables and removes the servers.
  *
  * The marked set lives in its own JSON file, never in `workspace.json`: that
  * document's in-memory state is authoritative while the Host runs, so a raw
@@ -91,6 +102,15 @@ import {
   SKILLS_DIR_NAME,
 } from './skills.js';
 import { readAgentInstructions, saveAgentInstructions } from './agent.js';
+import {
+  MAX_MCP_BODY_BYTES,
+  MAX_MCP_SERVERS,
+  McpStore,
+  normalizeMcpServer,
+  publicServer,
+  readMcpServers,
+  writeMcpServers,
+} from './mcp.js';
 
 /** Plugin package name; also the loader row id. */
 const PLUGIN_NAME = 'dsh-mikufan';
@@ -106,6 +126,8 @@ const MAX_BODY_BYTES = 16 * 1024;
  * ordinary JSON endpoints.
  */
 const MAX_AGENT_BODY_BYTES = 512 * 1024;
+/** State file name of the MCP server document (`mcp.js`), under `<DSH home>/<plugin>/`. */
+const MCP_STATE_FILE_NAME = 'mcp.json';
 /** A session id safe to use as a path segment and in a CSS attribute selector. */
 const SESSION_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,190}$/;
 /** Own state file name, under `<DSH home>/dsh-mikufan/`. */
@@ -280,6 +302,14 @@ class PreferencesStore {
     /** @type {{ deleteSessionsEnabled: boolean, splashEnabled: boolean, memoryEnabled: boolean }} */
     this.values = { deleteSessionsEnabled: true, splashEnabled: true, memoryEnabled: true };
     this.writing = Promise.resolve();
+    /**
+     * Optional hook the Host sets after construction: fired with the new value
+     * after a persisted `memoryEnabled` toggle, so the running process can
+     * register/release the memory tools without a reload. Assigning nothing
+     * keeps the store standalone (tests).
+     * @type {((enabled: boolean) => void) | undefined}
+     */
+    this.onMemoryEnabledChange = undefined;
     this.loadSync();
   }
 
@@ -535,15 +565,88 @@ async function isSessionLive(ctx, id) {
 }
 
 /**
+ * Load the parent → direct-children link table of the logical session corpus.
+ *
+ * Subagent sessions never appear in the sidebar's session list, so the user
+ * cannot mark them — but each log header records its `parentSession`, and the
+ * `sessionQuery` service exposes every header of the corpus (live-preferred).
+ * The sweep uses this table to take a marked session's subagent tree with it.
+ *
+ * @param ctx - host plugin context.
+ * @param log - reporter.
+ * @returns parent id → direct child ids, or `undefined` when the service is
+ *   absent or fails (the sweep then behaves exactly like before cascading).
+ */
+async function loadSubagentChildLinks(ctx, log) {
+  const query = ctx.get('sessionQuery');
+  if (query === undefined || typeof query.listSessions !== 'function') return undefined;
+  let records;
+  try {
+    records = await query.listSessions();
+  } catch (error) {
+    log(`subagent cascade unavailable (sessionQuery listing failed: ${error?.message ?? error})`);
+    return undefined;
+  }
+  if (!Array.isArray(records)) return undefined;
+  /** @type {Map<string, string[]>} */
+  const children = new Map();
+  for (const record of records) {
+    const header = record?.header;
+    const parent = header?.parentSession;
+    if (!isSafeSessionId(header?.id) || !isSafeSessionId(parent)) continue;
+    const list = children.get(parent);
+    if (list === undefined) children.set(parent, [header.id]);
+    else if (!list.includes(header.id)) list.push(header.id);
+  }
+  return children;
+}
+
+/**
+ * Collect the whole descendant tree of one session from a child-link table.
+ *
+ * Breadth-first over direct-child links; the visited set makes cycles from a
+ * corrupted corpus harmless. Self-links are ignored.
+ *
+ * @param id - root session id (not included in the result).
+ * @param children - parent id → direct child ids.
+ * @returns descendant ids in discovery order.
+ */
+function collectDescendantIds(id, children) {
+  const found = [];
+  const queue = [id];
+  const seen = new Set(queue);
+  while (queue.length > 0) {
+    for (const child of children.get(queue.shift()) ?? []) {
+      if (seen.has(child) || child === id) continue;
+      seen.add(child);
+      found.push(child);
+      queue.push(child);
+    }
+  }
+  return found;
+}
+
+/**
  * Physically delete every marked session that is not live.
+ *
+ * A marked session that is really deleted takes its subagent sessions with it
+ * ({@link loadSubagentChildLinks}, {@link collectDescendantIds}): each
+ * descendant goes through the same liveness fence and artifact cleanup as the
+ * marked session itself. A live descendant is marked for the next startup; a
+ * failed descendant deletion is marked too, riding the same durable retry
+ * path as a user-made mark. The user's own marked set is otherwise never
+ * inflated: descendants of a live or failed parent stay untouched, and
+ * cancelling the parent's mark never deletes its subagents.
  *
  * The mark is kept when a deletion fails, so the next startup retries it.
  *
  * @param options - ctx, harness home, store, reporter.
- * @returns the per-session outcome.
+ * @returns the per-session outcome; `cascade` lists the descendants actually
+ *   deleted through their parent.
  */
 async function sweepMarkedSessions({ ctx, dshHome, store, log }) {
-  const outcome = { purged: [], skipped: [], failed: [] };
+  const outcome = { purged: [], skipped: [], failed: [], cascade: [] };
+  const children = await loadSubagentChildLinks(ctx, log);
   for (const id of store.list()) {
     if (!isSafeSessionId(id)) {
       log(`dropping malformed session id from the marked set: ${JSON.stringify(id)}`);
@@ -566,6 +669,30 @@ async function sweepMarkedSessions({ ctx, dshHome, store, log }) {
           cacheRemoved ? 'removed' : 'absent'
         }, registry: ${registry})`,
       );
+      if (children === undefined || !children.has(id)) continue;
+      for (const child of collectDescendantIds(id, children)) {
+        try {
+          if ((await isSessionLive(ctx, child)) === true) {
+            store.add(child);
+            outcome.skipped.push(child);
+            log(`cascade kept ${child}: the subagent session is live; marked for the next startup`);
+            continue;
+          }
+          const childLog = await removeSessionLogDirectory(dshHome, child);
+          const childCache = await removeProjectionCache(dshHome, child);
+          const childRegistry = await forgetInWorkspaceRegistry(ctx, dshHome, child, log);
+          outcome.cascade.push(child);
+          log(
+            `cascade deleted ${child} (log directory: ${childLog ? 'removed' : 'absent'}, projection cache: ${
+              childCache ? 'removed' : 'absent'
+            }, registry: ${childRegistry})`,
+          );
+        } catch (error) {
+          store.add(child);
+          outcome.failed.push(child);
+          log(`failed to delete ${child} (subagent cascade): ${error?.message ?? error}`);
+        }
+      }
     } catch (error) {
       outcome.failed.push(id);
       log(`failed to delete ${id}: ${error?.message ?? error}`);
@@ -635,13 +762,18 @@ function publicSkill(detail) {
  *   `<DSH home>/AGENTS.md`)
  * - `POST <prefix>/agent` `{content}` → writes that file; blank content removes
  *   it (`{ path, exists, content, bytes, saved: true }`)
+ * - `GET  <prefix>/mcp` → `{ servers }` (the Codex-standard `mcp_servers` list)
+ * - `POST <prefix>/mcp` → creates one server (the whole raw object in the body)
+ * - `PATCH <prefix>/mcp/<name>` → replaces one server (name change included)
+ * - `PATCH <prefix>/mcp/<name>/enabled` `{enabled}` → flips one `enabled` flag
+ * - `DELETE <prefix>/mcp/<name>` → removes one server
  *
  * @param options - ctx, delete-session store, preference store, memory store,
  *   LAN facade, the managed skills root, the Harness home the Agent page edits,
- *   and the reporter.
+ *   the MCP store, and the reporter.
  * @returns the route handler.
  */
-function createRouteHandler({ ctx, store, preferences, memory, lan, skillsRoot, agentHome, bundledMarkerFile, log }) {
+function createRouteHandler({ ctx, store, preferences, memory, lan, skillsRoot, agentHome, mcp, bundledMarkerFile, log }) {
   const trusted = (req) => {
     try {
       const connection = ctx.get('connection');
@@ -758,6 +890,15 @@ function createRouteHandler({ ctx, store, preferences, memory, lan, skillsRoot, 
           const memoryChanged = hasMemory && preferences.memoryEnabled !== body.memoryEnabled;
           const changed = deleteChanged || splashChanged || memoryChanged;
           if (changed) await preferences.setFeatures(body);
+          // The memory switch is live beyond the flag: the four `memory_*` tool
+          // definitions register/release inside the running process right here.
+          if (memoryChanged && typeof preferences.onMemoryEnabledChange === 'function') {
+            try {
+              preferences.onMemoryEnabledChange(body.memoryEnabled === true);
+            } catch (error) {
+              log(`memory tools switch failed: ${error?.message ?? error}`);
+            }
+          }
           if (deleteChanged) log(`delete-sessions ${body.deleteSessionsEnabled ? 'enabled' : 'disabled'}`);
           if (splashChanged) log(`startup animation ${body.splashEnabled ? 'enabled' : 'disabled'}`);
           if (memoryChanged) log(`local memory ${body.memoryEnabled ? 'enabled' : 'disabled'}`);
@@ -815,6 +956,58 @@ function createRouteHandler({ ctx, store, preferences, memory, lan, skillsRoot, 
         log(`AGENTS.md ${saved.exists ? `saved (${saved.bytes} bytes)` : 'cleared'} via panel`);
         envelope(res, 200, { ...saved, saved: true });
         return;
+      }
+      // MCP: the Codex-standard `mcp_servers.<name>` list (mcp.js). The store
+      // serializes every mutation; errors carry route-facing codes.
+      if (action === 'mcp' && (req.method === 'GET' || req.method === 'POST')) {
+        if (mcp === undefined) {
+          envelope(res, 503, undefined, { code: 'unavailable', message: 'the MCP engine is unavailable' });
+          return;
+        }
+        if (req.method === 'GET') {
+          envelope(res, 200, { servers: (await mcp.list()).map(publicServer) });
+          return;
+        }
+        const body = await readJsonBody(req, MAX_MCP_BODY_BYTES);
+        const created = await mcp.create(body);
+        log(`MCP server created via panel: ${created.name} (${created.transport})`);
+        envelope(res, 200, { server: publicServer(created), servers: (await mcp.list()).map(publicServer) });
+        return;
+      }
+      {
+        const match = action.match(/^mcp\/([A-Za-z0-9_-]{1,32})(\/enabled)?$/);
+        if (match !== null && mcp !== undefined) {
+          const name = match[1];
+          const isEnabled = match[2] === '/enabled';
+          if (isEnabled && req.method === 'PATCH') {
+            const body = await readJsonBody(req);
+            if (typeof body?.enabled !== 'boolean') {
+              envelope(res, 400, undefined, { code: 'bad-preference', message: 'enabled must be a boolean' });
+              return;
+            }
+            const server = await mcp.setEnabled(name, body.enabled);
+            log(`MCP server ${name} ${body.enabled ? 'enabled' : 'disabled'} via panel`);
+            envelope(res, 200, { server: publicServer(server) });
+            return;
+          }
+          if (!isEnabled && req.method === 'PATCH') {
+            const body = await readJsonBody(req, MAX_MCP_BODY_BYTES);
+            const server = await mcp.update(name, body);
+            log(`MCP server updated via panel: ${name}${server.name === name ? '' : ` -> ${server.name}`}`);
+            envelope(res, 200, { server: publicServer(server) });
+            return;
+          }
+          if (!isEnabled && req.method === 'DELETE') {
+            const removed = await mcp.remove(name);
+            if (!removed) {
+              envelope(res, 404, undefined, { code: 'not-found', message: `no MCP server named ${name}` });
+              return;
+            }
+            log(`MCP server deleted via panel: ${name}`);
+            envelope(res, 200, { removed: true, id: name });
+            return;
+          }
+        }
       }
       // Skills: the managed user root (`<dshHome>/skills`) the Harness scans.
       if (action === 'skills' && req.method === 'GET') {
@@ -956,6 +1149,67 @@ export function bundledSkillDirectory() {
 }
 
 /**
+ * Push one MCP server's `enabled` flag into the running Harness composition.
+ *
+ * The MCP page owns the Codex-standard document (`mcp.json`); a harness or
+ * Codex *connection* however comes from a composition entry — the user pasted
+ * the generated `@deepseek-ai/dsh-mcp-client` YAML into the profile patch as
+ * `id: mcp-<name>`. When such an entry exists, flipping the flag here rewrites
+ * that entry's `disabled` through the plugin manager and reloads it, so the
+ * panel switch takes effect immediately instead of on the next restart.
+ *
+ * Outcomes of the bridge (never thrown — the document write already succeeded):
+ * - `'reloaded'`: the composition entry was found and reloaded.
+ * - `'absent'`: no composition entry with `mcp-<name>` exists (or the plugin
+ *   manager is not loaded) — only the document changed, effective next paste/
+ *   restart. The expected state for a server that was never wired in.
+ * - `'failed'`: the manager rejected the change (protected entry, concurrent
+ *   edit, …); the message lands on the record's `applyError` for the panel.
+ *
+ * @param ctx - owning Cordis context.
+ * @param server - the persisted server record (name + enabled).
+ * @param log - reporter.
+ * @returns `'reloaded'`, `'absent'`, or `'failed'` (rejected with `applyError`).
+ */
+export async function applyMcpEnabled(ctx, server, log) {
+  const entryId = `mcp-${server.name}`;
+  const enabled = server.enabled === true;
+  let manager;
+  try {
+    manager = ctx.get('pluginManager');
+  } catch {
+    manager = undefined;
+  }
+  if (manager === undefined || typeof manager.setPluginEnabled !== 'function' || typeof manager.listPlugins !== 'function') {
+    return 'absent';
+  }
+  let row;
+  try {
+    row = (await manager.listPlugins()).find((item) => item.entryId === entryId);
+  } catch (error) {
+    log(`MCP sync: listing plugins failed: ${error?.message ?? error}`);
+    throw new Error(`listing plugins failed: ${error?.message ?? error}`);
+  }
+  if (row === undefined || row.readOnlyReason !== undefined) {
+    if (row !== undefined) log(`MCP sync: ${entryId} is not addressable (${row.readOnlyReason})`);
+    return 'absent';
+  }
+  if ((row.enabled ?? true) === enabled) return 'reloaded';
+  try {
+    const outcome = await manager.setPluginEnabled(entryId, enabled);
+    if (outcome?.restartReason !== undefined) {
+      log(`MCP sync: ${entryId} ${enabled ? 'enabled' : 'disabled'} but needs a restart: ${outcome.restartReason}`);
+      return 'restart-required';
+    }
+    log(`MCP sync: ${entryId} ${enabled ? 'enabled' : 'disabled'} in the running composition`);
+    return 'reloaded';
+  } catch (error) {
+    log(`MCP sync: ${entryId} could not be ${enabled ? 'enabled' : 'disabled'}: ${error?.message ?? error}`);
+    throw error;
+  }
+}
+
+/**
  * Plugin entry: run the startup sweep, publish the mark endpoints, drop a mark
  * as soon as the user continues talking to that session, and cover the Web UI's
  * boot with the startup animation while the preference allows it. All feature
@@ -971,6 +1225,10 @@ export function apply(ctx) {
   const skillsRoot = join(dshHome, SKILLS_DIR_NAME);
   /** Records which bundled skills were installed once, so a removal sticks. */
   const bundledMarkerFile = join(dshHome, PLUGIN_NAME, 'bundled-skills.json');
+  /** The Codex-standard MCP server list (Component 7, `mcp.js`). */
+  const mcp = new McpStore(join(dshHome, PLUGIN_NAME, MCP_STATE_FILE_NAME), (server) =>
+    applyMcpEnabled(ctx, server, log),
+  );
   void memory.load();
   log(
     `features: delete-sessions=${preferences.deleteSessionsEnabled ? 'on' : 'off'}, ` +
@@ -1015,11 +1273,54 @@ export function apply(ctx) {
   // dsh-tools' published types (`parameters` = the JSON Schema object,
   // `output.schema` inside the enforced JsonSchemaNode subset), so no harness
   // import is needed and the registration cannot fail on module resolution.
+  //
+  // The dashboard switch stays live: the store exposes `onMemoryEnabledChange`
+  // and the preferences route fires it after every persisted toggle, so the
+  // tool set is registered and disposed within the running process without a
+  // reload (the route also touches a module-scoped disposer for the pre-route
+  // window, because the route handler is created before the inject body runs).
+  /** Disposer for the tool set, owned by whichever effect last registered it. */
+  let memoryToolsDispose = null;
+  const registerOrReleaseMemoryTools = (enabled) => {
+    if (enabled && memoryToolsDispose === null) {
+      const disposers = createMemoryTools(memory, log).map((definition) => {
+        try {
+          return ctx.get('tools')?.register(definition);
+        } catch {
+          return undefined;
+        }
+      });
+      memoryToolsDispose = () => {
+        for (const dispose of disposers) {
+          try {
+            dispose?.();
+          } catch {
+            /* a lost race with plugin teardown: the disposer is already dead */
+          }
+        }
+      };
+    } else if (!enabled && memoryToolsDispose !== null) {
+      const dispose = memoryToolsDispose;
+      memoryToolsDispose = null;
+      dispose();
+    }
+  };
+  preferences.onMemoryEnabledChange = (enabled) => {
+    registerOrReleaseMemoryTools(enabled === true);
+  };
   ctx.inject(['tools'], (scoped) => {
     if (preferences.memoryEnabled !== true) return undefined;
+    memoryToolsDispose = null; // the inject body owns the lifecycle now
     const disposers = createMemoryTools(memory, log).map((definition) => scoped.tools.register(definition));
-    return () => {
+    memoryToolsDispose = () => {
       for (const dispose of disposers) dispose();
+    };
+    return () => {
+      if (memoryToolsDispose !== null) {
+        const dispose = memoryToolsDispose;
+        memoryToolsDispose = null;
+        dispose();
+      }
     };
   });
 
@@ -1069,6 +1370,9 @@ export function apply(ctx) {
       }
       try {
         const outcome = await sweepMarkedSessions({ ctx, dshHome, store, log });
+        if (outcome.cascade.length > 0) {
+          log(`startup sweep cascade-deleted ${outcome.cascade.length} subagent session(s)`);
+        }
         if (outcome.purged.length > 0) log(`startup sweep deleted ${outcome.purged.length} session(s)`);
         if (outcome.failed.length > 0) log(`${outcome.failed.length} session(s) stayed marked for the next startup`);
       } catch (error) {
@@ -1264,7 +1568,7 @@ export function apply(ctx) {
         scoped.webServer.register({
           kind: 'prefix',
           path: ROUTE_PREFIX,
-          handler: createRouteHandler({ ctx, store, preferences, memory, lan, skillsRoot, agentHome: dshHome, bundledMarkerFile, log }),
+          handler: createRouteHandler({ ctx, store, preferences, memory, lan, skillsRoot, agentHome: dshHome, mcp, bundledMarkerFile, log }),
         }),
       `${PLUGIN_NAME}: ${ROUTE_PREFIX} routes`,
     );
@@ -1281,6 +1585,8 @@ export const __internal = {
   queryTerms,
   publicEntry,
   sweepMarkedSessions,
+  loadSubagentChildLinks,
+  collectDescendantIds,
   removeSessionLogDirectory,
   removeProjectionCache,
   forgetInWorkspaceRegistry,
@@ -1316,5 +1622,14 @@ export const __internal = {
     resetLanAccessOnStartup,
     saveLanPreferences,
     urlHost,
+  },
+  mcp: {
+    MAX_MCP_SERVERS,
+    McpStore,
+    applyMcpEnabled,
+    normalizeMcpServer,
+    publicServer,
+    readMcpServers,
+    writeMcpServers,
   },
 };

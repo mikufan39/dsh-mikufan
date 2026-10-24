@@ -46,8 +46,6 @@ const SPLASH_STYLE = `
 #dsh-mikufan-boot[data-mikufan-leaving="1"]{opacity:0;pointer-events:none}
 #dsh-mikufan-boot-frame{position:absolute;inset:0;display:block;width:100%;height:100%;border:0;background:#050507}
 #dsh-mikufan-boot-shield{position:absolute;inset:0;cursor:default}
-#dsh-mikufan-boot-hint{position:absolute;left:50%;bottom:max(20px,env(safe-area-inset-bottom,0px));transform:translateX(-50%);color:rgba(245,245,247,.45);font:400 12px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;letter-spacing:.08em;white-space:nowrap;opacity:0;pointer-events:none;transition:opacity .6s ease .8s}
-#dsh-mikufan-boot[data-mikufan-ready="1"] #dsh-mikufan-boot-hint{opacity:1}
 @media (prefers-reduced-motion:reduce){#dsh-mikufan-boot{transition:none}}
 `;
 
@@ -56,11 +54,11 @@ const SPLASH_STYLE = `
  * above the iframe so a click anywhere (not only on the page background) is a
  * skip; the iframe keeps `tabindex="-1"` and is decorative here.
  */
-const SPLASH_MARKUP = `<div id="dsh-mikufan-boot" data-mikufan-boot="" aria-hidden="true"><iframe id="dsh-mikufan-boot-frame" src="${SPLASH_IFRAME_SRC}" title="DeepSeek Harness startup animation" tabindex="-1" scrolling="no"></iframe><div id="dsh-mikufan-boot-shield"></div><div id="dsh-mikufan-boot-hint">跳过 · Skip</div></div>`;
+const SPLASH_MARKUP = `<div id="dsh-mikufan-boot" data-mikufan-boot="" aria-hidden="true"><iframe id="dsh-mikufan-boot-frame" src="${SPLASH_IFRAME_SRC}" title="DeepSeek Harness startup animation" tabindex="-1" scrolling="no"></iframe><div id="dsh-mikufan-boot-shield"></div></div>`;
 
 /**
  * Cover bootstrap, rendered right after the markup and executed while the
- * document is parsed: skip (click / Escape), dissolve on the splash's `ended`
+ * document is parsed: skip (any key / click), dissolve on the splash's `ended`
  * signal, and fail open when the iframe never becomes ready. It is a plain
  * classic script: it must not wait for a module graph that may be slow to load.
  */
@@ -116,7 +114,11 @@ const SPLASH_BOOT_SCRIPT = `
     window.setTimeout(remove, 520);
   };
   const onKeyDown = (event) => {
-    if (event.key !== 'Escape') return;
+    /* Any key skips the animation. Modifier combos pass through (copy/paste,
+       browser shortcuts), and a modifier key alone is not a skip gesture. */
+    if (event.metaKey || event.ctrlKey || event.altKey) return;
+    if (event.key === 'Meta' || event.key === 'Control' || event.key === 'Alt'
+      || event.key === 'Shift' || event.key === 'CapsLock') return;
     event.preventDefault();
     event.stopPropagation();
     finish(false);

@@ -234,13 +234,16 @@ export class MemoryStore {
   }
 
   /**
-   * Keyword search over all entries, enabled or not (labelled in the result).
+   * Keyword search over enabled entries only — a disabled entry is fully
+   * invisible to the model (it does not exist for retrieval purposes; the
+   * panel lists it, and re-enabling brings it back).
    * @param query - raw query text.
    * @param limit - maximum matches.
    * @returns matches with their scores, best first.
    */
   search(query, limit = 10) {
     const scored = this.entries
+      .filter((entry) => entry.enabled === true)
       .map((entry) => ({ entry, score: similarity(query, entry.content) }))
       .filter((match) => match.score > 0)
       .sort((a, b) => b.score - a.score || (a.entry.updatedAt < b.entry.updatedAt ? 1 : -1));
@@ -313,6 +316,7 @@ export function createMemoryTools(store, log = createLog()) {
   const similarOf = (content) =>
     store
       .list()
+      .filter((entry) => entry.enabled === true)
       .map((entry) => ({ id: entry.id, content: entry.content, score: similarity(content, entry.content) }))
       .filter((match) => match.score >= SIMILAR_SUGGEST_THRESHOLD)
       .sort((a, b) => b.score - a.score)
@@ -481,7 +485,9 @@ export function createMemoryTools(store, log = createLog()) {
     }),
     build({
       name: 'memory_list',
-      description: 'List the stored long-term memories (most recently updated first). Optional type filter.',
+      description:
+        'List the enabled stored long-term memories (most recently updated first). Optional type filter. ' +
+        'Disabled entries are hidden — the user manages them from the panel.',
       parameters: {
         type: 'object',
         properties: {
@@ -529,6 +535,7 @@ export function createMemoryTools(store, log = createLog()) {
         const type = args?.type;
         const entries = store
           .list()
+          .filter((entry) => entry.enabled === true)
           .filter((entry) => !isMemoryType(type) || entry.type === type)
           .sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1))
           .slice(0, 50)

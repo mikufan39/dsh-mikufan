@@ -1,17 +1,18 @@
 # dsh-mikufan
 
-DeepSeek Harness 插件包（bundle）。版本 **0.10.3**。
+DeepSeek Harness 插件包（bundle）。版本 **0.12.1**。
 
 - 包名 / 行 id：`dsh-mikufan`
 - 图标：`icon.jpg`
 - 显示元数据：`locale/en.json`、`locale/zh.json`
-- **六个功能**，开关与管理页统一收在侧栏「控制面板」：
+- **七个功能**，开关与管理页统一收在侧栏「控制面板」：
   1. **Delete-sessions（删除会话）**
   2. **Startup animation（开机动画）**
   3. **Local memory（长期记忆）**
   4. **LAN access（局域网访问）**
   5. **Skills（技能）**
   6. **Agent（全局指令）**
+  7. **MCP（服务器管理）**
 
 曾经拆成两个独立插件（`dsh-mikufan` + `dsh-mikufan-startup-animation`），后按需求撤回：
 一个插件包只能有一个浏览器半边，因此两个功能回到同一个插件里，用**内置开关**区分。
@@ -30,6 +31,10 @@ DeepSeek Harness 插件包（bundle）。版本 **0.10.3**。
    - 会话日志目录 `~/.dsh/sessions/<工作区>/<会话 ID>/`（含 `session.v4.jsonl.zstd`）
    - 投影缓存 `~/.dsh/storages/session_projcache/sessions/<会话 ID>.json`
    - 工作区登记表 `~/.dsh/storages/workspace.json` 中的 `sessionIds` / `archivedSessionIds` / `pinnedSessionIds` 引用（存在活动 storage domain 时通过 domain 写入，否则直接改写文件）
+   - **子代理会话一并删除（0.11.0）**：被删会话的整个子代理树（`sessionQuery` 按 `parentSession`
+     头发现）跟随主会话走同样的三步清理；运行中的子代理会被跳过并落标记，下次启动重试；
+     存活的父会话永远不会级联删除其子代理。`sessionQuery` 服务不可用或列举失败时优雅降级为
+     仅删主会话（旧行为）。
    - 正在运行/被占用的会话会被跳过并保留标记，下次启动重试；删除失败同样保留标记。
 
 ### 开关（内置）
@@ -50,7 +55,8 @@ DeepSeek Harness 插件包（bundle）。版本 **0.10.3**。
 1. **在应用渲染之前**铺满全屏播放一次：640 颗光点汇聚成 DeepSeek 鲸标，定格在结束帧，
    约 0.65 秒后淡出（0.5 秒）露出已经加载好的 Harness 界面。
 2. 每次**完整页面加载**播放一次（打开、刷新、新标签页）；SPA 内切换会话不重播。
-3. **跳过**：点击画面任意位置，或按 `Esc`，覆盖层立即淡出。
+3. **跳过**：播放期间按**任意键**或点击画面任意位置，覆盖层立即淡出（无提示文字；
+   修饰键组合如 `Ctrl+C` 照常透传，不会误触发）。
 4. **控制面板 → 仪表页「启动动画」卡片**：开关（默认开），修改在**下次刷新页面**生效。
 5. **减少动态效果**（`prefers-reduced-motion: reduce`）：不播放粒子动画，直接呈现结束帧，
    短暂停留后淡出。
@@ -114,15 +120,18 @@ Agent 的**纯本地**长期记忆（零依赖外部服务，存 `~/.dsh/dsh-mik
 
 | 工具 | 作用 |
 | --- | --- |
-| `memory_write` | 写一条事实（可选 `type`，或带 `id` 更新既有条目）。返回语义相近的既有条目，提示 Agent 用 UPDATE 代替 ADD（Mem0 式「检索-再决策」；本引擎自身不静默合并） |
-| `memory_search` | 关键词检索（中英文均可；中文走 bigram + 单字覆盖，无需分词依赖） |
-| `memory_list` | 列出全部记忆（可按 type 过滤） |
-| `memory_delete` | 按 id 删除一条 |
+| `memory_write` | 写一条事实（可选 `type`，或带 `id` 更新既有条目）。返回语义相近的既有条目，提示 Agent 用 UPDATE 代替 ADD（Mem0 式「检索-再决策」；本引擎自身不静默合并）。**只考虑启用中的条目** |
+| `memory_search` | 关键词检索（中英文均可；中文走 bigram + 单字覆盖，无需分词依赖）。**只返回启用中的条目** |
+| `memory_list` | 列出启用中的记忆（可按 type 过滤）；停用条目对模型不可见，由面板管理 |
+| `memory_delete` | 按 id 删除一条（含停用条目） |
 
 - 条目类型（Claude Code auto-memory 四分类）：`user`（用户角色/偏好）、`feedback`（行为纠正）、
   `project`（项目决策/进行中工作，**明确排除可从代码库推导的内容**）、`reference`（外部资料指引）。
 - 工具描述已写入使用准则：不存密钥/凭据/临时任务状态；效果层用 harness 的 `defineTool` 编译 schema 并校验参数。
 - 上限保护：最多 200 条（超出拒绝写入并提示清理）、单条 ≤2000 字符。
+- **停用条目对模型完全不可见**（0.12.1）：面板开关停用一条记忆后，`memory_search` 搜不到、
+  `memory_list` 不列出、`memory_write` 的相似建议也不再提示它——模型的视野里这条记忆不存在；
+  重新启用即全部恢复。数据仍在 `memory.json` 里，只有删除才真正移除。
 
 ### 注入：会话记忆索引
 
@@ -154,7 +163,10 @@ Agent 的**纯本地**长期记忆（零依赖外部服务，存 `~/.dsh/dsh-mik
 ### 开关（内置）
 
 - **控制面板 → 仪表页「记忆」卡片**（默认开，立即生效）：关闭后工具集卸载、索引注入为空、
-  侧栏面板显示「off」状态但已存数据不删除；重新打开即恢复。
+  侧栏面板显示「off」状态但已存数据不删除；重新打开即恢复。0.12.1 起开关**全链路即时**：
+  关闭时四个 `memory_*` 工具在运行中的进程内即时注销、开启即时注册回来（preferences 路由
+  触发 `onMemoryEnabledChange` 钩子），无需重启或等待插件重载；索引文本本来就是每次会话
+  组装时按开关实时求值。
 
 ### 实现与端点
 
@@ -291,27 +303,89 @@ POST /mikufan/api/agent {content}  -> { ok: true, value: { path, exists, content
                                       （content 为空白时删除文件：{ exists: false, removed: true, updatedAt: '' }）
 ```
 
+## 功能 7：MCP（服务器管理）
+
+以 **OpenAI ChatGPT / Codex 的 `mcp_servers` 标准**管理 MCP 服务器连接（ChatGPT 桌面应用、Codex CLI
+和 IDE 扩展共用同一套 `config.toml` 配置格式）。字段与 Codex 的 `[mcp_servers.<名称>]` 表一一对应：
+
+| 字段 | 传输 | 说明 |
+| --- | --- | --- |
+| `name` | 两者 | 服务器键（`[mcp_servers.<name>]`），1–32 位 `[A-Za-z0-9_-]`，即 dsh-mcp-client 的 `serverName` |
+| `transport` | 两者 | `stdio`（本地进程）或 `streamable_http`（远程服务） |
+| `command` / `args` / `env` / `env_vars` / `cwd` | stdio | 启动命令、参数、复制的环境变量表、**转发的**本机环境变量名列表、工作目录 |
+| `url` / `bearer_token_env_var` / `http_headers` | streamable_http | 端点、承载令牌的**环境变量名**（值本身不落盘）、附加请求头 |
+| `startup_timeout_sec` / `tool_timeout_sec` | 两者 | 启动 / 工具超时（默认 10 / 60，上限 600） |
+| `enabled` | 两者 | 开关（Codex 默认 true；关闭的条目保留但不写入配置） |
+
+存储在 `~/.dsh/dsh-mikufan/mcp.json`（`{ version: 1, servers: [...] }`），临时文件 + rename 原子写，
+写队列串行化。文档只保存变量名，**从不保存令牌值**。每台服务器的详情浮层提供两段可直接复制的配置：
+Codex `config.toml` 表，以及等价的 `@deepseek-ai/dsh-mcp-client` `cordis.patch.yml` 条目
+（`streamable_http` 自动转成 dsh 的 `streamable-http`，`tool_timeout_sec` 转成 `toolCallTimeoutMs`）。
+
+**开关立即生效**：把详情里的 YAML 片段粘进 web profile 的 `cordis.patch.yml`（条目 id 用
+`mcp-<名称>`）之后，页面开关会同时联动运行中的组合——宿主经 `pluginManager.setPluginEnabled()`
+改写该条目的 `disabled` 并触发 HMR 重载，`@deepseek-ai/dsh-mcp-client` 随之重建/拆除连接
+（真机验证：开关翻转后 daemon 子进程即时拉起/退出，无需重启 Harness）。卡片上会显示同步结果：
+「已同步到运行中的 Harness（立即生效）」/ 失败原因；组合里没有对应条目时（服务器从未接入），
+开关只写文档（预期行为）。Codex 侧的 `~/.codex/config.toml` 仍需手动同步。
+
+### WebUI：「控制面板 → MCP」页
+
+- 与「记忆 / Skills」同构的卡片网格：第一张是**添加服务器卡片**（虚线 + 加号），其余每张是一枚服务器卡；
+- 卡片第一行是名称，第二行是传输方式芯片 + 端点（stdio 命令或 URL，两行截断）；标题行右侧是**开关**，
+  页脚是**编辑 / 详情 / 删除**（两击确认）；
+- 计数行右侧有**搜索服务器**（名称/传输/端点即时过滤，带「· 匹配 N」）与刷新，左侧显示
+  「共 N 个服务器 · M 个启用」和文档路径 `~/.dsh/dsh-mikufan/mcp.json`；
+- **添加 / 编辑弹窗**按传输方式切换字段块：stdio 是 命令 / 参数 / 转发环境变量（每行一个变量名）/
+  附加环境变量（每行 `KEY = value`，引号可选）/ 工作目录；streamable_http 是 URL / Bearer 令牌环境变量名 /
+  附加请求头；两种传输都有 启动超时 / 工具超时（留空 = Codex 默认）；`Ctrl/Cmd+Enter` 保存；
+- **详情浮层**：标题 / 传输描述 / 关闭，正文是 **Codex TOML** 与**本机 Harness YAML** 两段带复制按钮的
+  配置片段，页脚 删除（二次确认）/ 关闭。
+- **仪表页摘要卡**：控制面板首页有一张 MCP 卡（无开关，48px 芯片图标），页脚显示
+  「x / Y 个服务器已启用」（挂载时读取服务器列表，无需先进入 MCP 页）；
+  还没有服务器时提示「还没有 MCP 服务器，在 MCP 页添加」。
+
+### 实现与端点
+
+| 半边 | 文件 | 说明 |
+| --- | --- | --- |
+| Host | `mcp.js` | `normalizeMcpServer`（Codex 校验契约）、`readMcpServers` / `writeMcpServers`（原子写）、`McpStore`（读→改→写串行队列 + `applyEnabled` 联动钩子） |
+| Host | `index.js` | `GET/POST /mikufan/api/mcp`、`PATCH|DELETE /mikufan/api/mcp/<name>`、`PATCH /mikufan/api/mcp/<name>/enabled`；`applyMcpEnabled` 经 `pluginManager.setPluginEnabled` 联动运行中的组合（结果 `reloaded`/`absent`/`failed`/`restart-required` 随记录返回） |
+| Client | `client.js` | 控制面板「MCP」子页（`McpPageBody` / `McpCard` / `McpDialog` / `McpDetailOverlay`）与样式表 `mcp-panel.css` |
+
+```
+GET    /mikufan/api/mcp                  -> { ok: true, value: { servers } }
+POST   /mikufan/api/mcp {server}         -> { ok: true, value: { server, servers } }   （重名 409 exists）
+PATCH  /mikufan/api/mcp/<name> {server}  -> { ok: true, value: { server } }            （可改名；冲突 409）
+PATCH  /mikufan/api/mcp/<name>/enabled   -> { ok: true, value: { server } }            （{enabled: boolean}）
+DELETE /mikufan/api/mcp/<name>           -> { ok: true, value: { removed: true, id } }
+```
+
 ## 验证
 
 > 测试套件（`tests/`）与交接文档（`HANDOFF.md`）仅保留在本地，不随本仓库发布；以下命令在插件根目录可用。
 
 ```powershell
 node tests/sweep.test.mjs    # Host：清扫、存活会话跳过、两种登记表路径、继续对话还原、路由契约
-node tests/client.test.mjs   # Client：菜单行、行悬停按钮、样式规则、三个开关的写入/回滚/门控、面板注册、记忆卡片网格与新建/编辑弹窗、搜索与刷新、局域网四卡片页、Skills 卡片/详情/新建技能引用、Agent 单文本框页、仪表页 Skills/Agent 摘要卡与页脚
+node tests/client.test.mjs   # Client：菜单行、行悬停按钮、样式规则、四个开关的写入/回滚/门控、面板注册、记忆卡片网格与新建/编辑弹窗、搜索与刷新、局域网四卡片页、Skills 卡片/详情/新建技能引用、MCP 服务器卡片/添加编辑弹窗/详情浮层/双配置转录、Agent 单文本框页、仪表页 Skills/MCP/Agent 摘要卡与页脚
 node tests/skills.test.mjs   # 技能：解析/列表/创建/开关/删除/内置安装 + skills 路由
 node tests/agent.test.mjs    # 全局指令：空白读取/BOM/原样写入/清空移除/长度上限/更新时间 + agent 路由
+node tests/mcp-engine.test.mjs # MCP：Codex 校验契约/原子写/串行队列/重名改名冲突 + mcp 路由
 node tests/splash.test.mjs   # 动画：注入行、组合文档、路由契约、偏好读写、preferences API
 node tests/memory.test.mjs   # 记忆：store 生命周期、检索语义、四个工具契约、索引上限、memory 路由
 node tests/lan.test.mjs      # 局域网：连接数上限校验、偏好读写与旧文件读穿、真实 socket 的上限拒绝/释放
 ```
 
-七个脚本都只操作临时目录或桩对象，不会触碰真实的 `~/.dsh`。
+七个脚本都只操作临时目录或桩对象，不会触碰真实的 `~/.dsh`（`mcp-engine.test.mjs` 亦然；本机
+`~/.dsh/dsh-mikufan/mcp.json` 由页面/宿主在真实使用时写入）。
 
-## 已知边界（0.10.3）
+## 已知边界（0.12.1）
 
 - 删除在**下次启动**时执行，当前进程内不会立刻消失（这是本组件约定的语义）；插件热重载不触发清扫。
 - 若某会话在标记后仍被 Harness 保持打开，重启后该会话会被删除，属于预期行为；只要期间再发一条消息
   就会自动还原，从而保留下来。
+- 子代理级联只发生在**父会话真正被删除的那次清扫**：存活的父会话（含被跳过的）绝不会连带删除其
+  子代理；运行中的子代理被跳过并落标记重试；`sessionQuery` 不可用时降级为仅删主会话。
 - 删除线依赖工作区侧栏的行属性 `data-row-key` 与标题类名中的 `_title` 片段；收起三控件依赖
   宿主行按钮共用的 `_iconButton` 类名。上游大幅改版时样式可能失效（不会报错，也不会影响其他功能）。
 - 会话级联数据（附件 blob 等）不在此清理范围内；附件按内容哈希共享，删除会话不会删除 blob。
@@ -319,7 +393,17 @@ node tests/lan.test.mjs      # 局域网：连接数上限校验、偏好读写�
 - 动画固定使用素材的近黑舞台，不跟随 Harness 明暗主题（开机画面是品牌帧，不是应用界面）。
 - 「开机动画」开关只对**后续页面加载**生效；「删除会话」开关对 Host 立即生效，浏览器 UI 的增减
   在下次页面刷新后生效。
-- 六个功能共用一个插件：插件管理页里是一张卡片、一行组件；各功能开关在侧栏「控制面板」仪表页。
+- 七个功能共用一个插件：插件管理页里是一张卡片、一行组件；各功能开关在侧栏「控制面板」仪表页。
+- MCP 页管理**配置文档** `~/.dsh/dsh-mikufan/mcp.json`；连接本身来自组合条目：把详情里复制的 YAML
+  粘进 web profile 的 `cordis.patch.yml`（id 用 `mcp-<名称>`）后，页面开关即联动该条目并立即重载
+  （无条目时只写文档，预期行为）；Codex 侧 `~/.codex/config.toml` 不联动，仍需手动同步。
+- MCP 联动依赖宿主 `pluginManager` 服务（web profile 已加载）：条目被保护（`management-required`）、
+  同 id 覆盖行多于一条（`unaddressable`）或 HMR 返回 `restartReason` 时，卡片会显示对应的降级提示；
+  文档写入永远先行且不受联动失败影响。
+- MCP 文档只保存**环境变量名**（`bearer_token_env_var` / `env_vars`），令牌值永远不落盘；但 `env`
+  表按 Codex 标准就是明文键值（写进 Codex 配置也是明文），敏感值请用转发变量承载。
+- MCP 名称即 `[mcp_servers.<name>]` 键：与本机已加载的 dsh-mcp-client `serverName`、其他条目重名会
+  在接入时冲突（面板内重名创建会被 409 拒绝）。
 - 记忆检索是关键词/bigram 级别的，不是向量语义检索；改写幅度大的中英文混合表述可能漏召回
   （`memory_write` 的相近条目提示只是辅助，不构成保证）。v2 可引入 embedding。
 - 记忆索引每条截断 160 字符、上限 40 条；超出的条目仍在库里，但模型只能通过 `memory_search` 看到它们。

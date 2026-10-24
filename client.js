@@ -16,11 +16,11 @@
  *   the served index.html before this module can even load; this half only
  *   reads and writes the Host preference.
  *
- * Feature 3, "Control panel":
- * - One sidebar rail entry ("控制面板") opening the central panel under the id
+ * Feature 3, "Control panel" (shown as MAGICAL MIRAI):
+ * - One sidebar rail entry ("MAGICAL MIRAI") opening the central panel under the id
  *   `mikufan-control-panel`. A floating pill tab bar (per the redesigned
  *   control-panel draft) switches between six pages:
- *   - 控制面板: one card per built-in feature switch (delete-sessions, startup
+ *   - MAGICAL MIRAI: one card per built-in feature switch (delete-sessions, startup
  *     animation, long-term memory). Every switch used to live in Settings →
  *     General and on the plugin detail page; both seats are retired and the
  *     panel is the only place to flip a feature now. Writes go through the
@@ -32,9 +32,14 @@
  *     is that plugin's only UI: the switch, the LAN address picker, the port
  *     and the live proxy status live here. dsh-lan-access's own Client half
  *     retired its former Settings row and plugin-page section.
- *   - Skills / MCP: the skill manager and the MCP placeholder.
+ *   - Skills / MCP: the skill manager and the MCP server manager (the
+ *     ChatGPT/Codex `mcp_servers` standard, stored by the Host in
+ *     `~/.dsh/dsh-mikufan/mcp.json`).
  *   - Agent: one text box editing the user-global `<DSH home>/AGENTS.md` the
  *     Harness loads for every project; Save writes it, blank text removes it.
+ * The dashboard page also carries a summary card per manager page (Skills,
+ * Agent, MCP — no switch): its footer hydrates the same store the page uses,
+ * so the status is visible without visiting the page.
  * - The last opened page is remembered in `localStorage`.
  *
  * The marked set, the preferences and the memories are the Host's (see
@@ -99,7 +104,7 @@ window.__ModuleLoader__.load({
         'menu.cancelDeleteSession': '取消删除标记',
         'row.cancelDeleteSession': '取消删除标记',
         'deleteFeature.title': '删除会话',
-        'deleteFeature.description': '被删除的会话将在下次启动时删除，停用此功能删除不再执行。',
+        'deleteFeature.description': '被删除的会话将在下次启动时删除，其子代理会话一并删除；停用此功能删除不再执行。',
         'deleteFeature.pending.none': '下次启动不会删除任何会话',
         'deleteFeature.pending.some': '下次启动将删除 {count} 个会话',
         'deleteFeature.pending.off': '已关闭，下次启动不执行删除清扫',
@@ -108,11 +113,11 @@ window.__ModuleLoader__.load({
         'splash.pending.off': '已停用，页面加载将不再播放动画',
         'splash.pending.on': '每次加载页面时播放',
         'memoryFeature.title': '记忆',
-        'memoryFeature.description': 'Agent 的本地长期记忆，每个会话自动携带记忆索引',
+        'memoryFeature.description': 'Agent 的本地长期记忆，每个会话自动携带记忆索引。',
         'memoryFeature.pending.none': '已保存 {count} 条记忆',
         'memoryFeature.pending.off': '已保存 {count} 条记忆（当前已停用）',
         'lanFeature.title': '局域网访问',
-        'lanFeature.description': '允许局域网设备访问到 Harness',
+        'lanFeature.description': '允许局域网设备访问到 Harness。',
         'lanFeature.pending.off': '未开启',
         'lanFeature.pending.on': '使用 {url} 访问',
         'skillsFeature.title': 'Skills',
@@ -123,11 +128,15 @@ window.__ModuleLoader__.load({
         'agentFeature.pending.some': '上次更新时间：{time}',
         'agentFeature.pending.none': '上次更新时间：—',
         'agentFeature.pending.loading': '上次更新时间：…',
+        'mcpFeature.title': 'MCP',
+        'mcpFeature.description': '按 ChatGPT/Codex 标准管理 MCP 服务器连接。',
+        'mcpFeature.pending': '{enabled} / {total} 个服务器已启用',
+        'mcpFeature.pending.off': '还没有 MCP 服务器，在 MCP 页添加',
         'feature.error': '保存失败，请重试。',
-        'control.panel.label': '控制面板',
-        'control.panel.title': '控制面板',
+        'control.panel.label': 'MAGICAL MIRAI',
+        'control.panel.title': '主页',
         'control.panel.subtitle': '更改设置并对插件的功能自定义。',
-        'control.panel.tab.dashboard': '控制面板',
+        'control.panel.tab.dashboard': '主页',
         'control.panel.tab.memory': '记忆',
         'control.panel.tab.lan': '局域网访问',
         'control.panel.tab.skills': 'Skills',
@@ -210,12 +219,73 @@ window.__ModuleLoader__.load({
         'agent.saveFailed': '保存失败，请重试。',
         'agent.readFailed': '读取 AGENTS.md 失败，请刷新页面重试。',
         'mcp.tab.title': 'MCP',
-        'mcp.tab.subtitle': '配置 Model Context Protocol 服务器连接。',
+        'mcp.tab.subtitle': '按 ChatGPT/Codex 的 mcp_servers 标准管理 Model Context Protocol 服务器连接。',
         'mcp.placeholder.title': '暂无服务器',
         'mcp.placeholder.text': '添加 MCP 服务器后，可在此查看连接状态与可用工具。',
+        'mcp.add': '添加服务器',
+        'mcp.add.hint': '按 ChatGPT/Codex 的 mcp_servers 标准新增',
+        'mcp.count': '共 {count} 个服务器 · {enabled} 个启用',
+        'mcp.bar.matched': ' · 匹配 {count}',
+        'mcp.search.placeholder': '搜索服务器',
+        'mcp.search.label': '搜索服务器',
+        'mcp.empty': '还没有 MCP 服务器。点击上方卡片，按 Codex 标准添加第一个。',
+        'mcp.empty.search': '没有匹配的服务器。',
+        'mcp.refresh': '刷新服务器列表',
+        'mcp.readFailed': 'MCP 服务器列表读取失败，请刷新页面重试。',
+        'mcp.transport.stdio': 'stdio（本地进程）',
+        'mcp.transport.streamable_http': 'streamable_http（远程服务）',
+        'mcp.enabled.on': '已启用（同步开关到运行中的 Harness）',
+        'mcp.enabled.off': '已停用（保留条目，不写入配置）',
+        'mcp.enabled.enable': '启用',
+        'mcp.enabled.disable': '停用',
+        'mcp.enabled.switch': '{action}MCP 服务器：{name}',
+        'mcp.applied.reloaded': '已同步到运行中的 Harness（立即生效）。',
+        'mcp.applied.failed': '已写入 mcp.json，但同步到运行中的 Harness 失败：{message}',
+        'mcp.applied.restart': '已写入 mcp.json；该条目需要重启 Harness 才能生效。',
+        'mcp.edit': '编辑',
+        'mcp.details': '详情',
+        'mcp.delete': '删除',
+        'mcp.confirmDelete': '确认删除',
+        'mcp.new.title': '添加 MCP 服务器',
+        'mcp.new.desc': '按 ChatGPT/Codex 的 mcp_servers 标准填写；保存后可在详情里复制配置。',
+        'mcp.edit.title': '编辑 MCP 服务器',
+        'mcp.edit.desc': '字段与 Codex 的 [mcp_servers.<名称>] 一致，保存后写入 mcp.json。',
+        'mcp.field.name': '名称',
+        'mcp.field.name.hint': '1–32 位字母、数字、_ 或 -；对应 [mcp_servers.<名称>]',
+        'mcp.field.transport': '传输方式',
+        'mcp.field.command': '命令',
+        'mcp.field.command.hint': '启动服务器的可执行文件，例如 npx 或 python',
+        'mcp.field.args': '参数',
+        'mcp.field.args.hint': '空格分隔；含空格的参数用引号包裹',
+        'mcp.field.envVars': '转发环境变量',
+        'mcp.field.envVars.hint': '每行一个变量名；从本机环境原样转发',
+        'mcp.field.env': '附加环境变量',
+        'mcp.field.env.hint': '每行 KEY = value；复制进服务器进程',
+        'mcp.field.cwd': '工作目录',
+        'mcp.field.cwd.hint': '可选；服务器的启动目录',
+        'mcp.field.url': 'URL',
+        'mcp.field.url.hint': 'Streamable HTTP 端点地址',
+        'mcp.field.bearer': 'Bearer 令牌环境变量',
+        'mcp.field.bearer.hint': '只填变量名（如 GITHUB_TOKEN），令牌值本身不落盘',
+        'mcp.field.headers': '附加请求头',
+        'mcp.field.headers.hint': '每行 NAME = value；随请求发送',
+        'mcp.field.startupTimeout': '启动超时（秒）',
+        'mcp.field.startupTimeout.hint': '默认 10',
+        'mcp.field.toolTimeout': '工具超时（秒）',
+        'mcp.field.toolTimeout.hint': '默认 60',
+        'mcp.error.name': '名称需为 1–32 位字母、数字、_ 或 -。',
+        'mcp.error.command': 'stdio 服务器需要填写命令。',
+        'mcp.error.url': 'URL 必须以 http:// 或 https:// 开头。',
+        'mcp.error.table': '键值表每行写 NAME = value。',
+        'mcp.error.timeout': '超时必须是 0–600 之间的秒数。',
+        'mcp.detail.codex': 'Codex / ChatGPT（config.toml）',
+        'mcp.detail.dsh': '本机 Harness（cordis.patch.yml 条目）',
+        'mcp.detail.copy': '复制',
+        'mcp.detail.copied': '已复制',
+        'mcp.close': '关闭',
         'memory.tab.title': '记忆',
         'memory.tab.subtitle': 'Agent 跨会话记住的持久事实，纯本地存储。',
-        'memory.offNotice': '长期记忆功能当前已关闭，可在「控制面板」页开启。',
+        'memory.offNotice': '长期记忆功能当前已关闭，可在「MAGICAL MIRAI」页开启。',
         'memory.add.placeholder': '记一条新记忆，例如：用户偏好简洁回复…',
         'memory.addCard': '新建记忆',
         'memory.addCard.hint': '新建一条记忆',
@@ -261,7 +331,7 @@ window.__ModuleLoader__.load({
         'menu.cancelDeleteSession': 'Cancel deletion mark',
         'row.cancelDeleteSession': 'Cancel deletion mark',
         'deleteFeature.title': 'Delete sessions',
-        'deleteFeature.description': 'Marked sessions are deleted at the next startup; disabling this feature stops the sweep.',
+        'deleteFeature.description': 'Marked sessions are deleted at the next startup together with their subagent sessions; disabling this feature stops the sweep.',
         'deleteFeature.pending.none': 'No sessions will be deleted on next startup',
         'deleteFeature.pending.some': '{count} session(s) will be deleted on next startup',
         'deleteFeature.pending.off': 'Disabled — no sweep on next startup',
@@ -270,11 +340,11 @@ window.__ModuleLoader__.load({
         'splash.pending.off': 'Disabled — page loads play no animation',
         'splash.pending.on': 'Plays on every page load',
         'memoryFeature.title': 'Memory',
-        'memoryFeature.description': 'The agent\'s local long-term memory; every session carries a memory index',
+        'memoryFeature.description': 'The agent\'s local long-term memory; every session carries a memory index.',
         'memoryFeature.pending.none': '{count} memories saved',
         'memoryFeature.pending.off': '{count} memories saved (currently disabled)',
         'lanFeature.title': 'LAN access',
-        'lanFeature.description': 'Let devices on the LAN reach the Harness',
+        'lanFeature.description': 'Let devices on the LAN reach the Harness.',
         'lanFeature.pending.off': 'Off',
         'lanFeature.pending.on': 'Use {url} to connect',
         'skillsFeature.title': 'Skills',
@@ -285,11 +355,15 @@ window.__ModuleLoader__.load({
         'agentFeature.pending.some': 'Last updated: {time}',
         'agentFeature.pending.none': 'Last updated: —',
         'agentFeature.pending.loading': 'Last updated: …',
+        'mcpFeature.title': 'MCP',
+        'mcpFeature.description': 'Manage MCP servers in the ChatGPT/Codex standard.',
+        'mcpFeature.pending': '{enabled} / {total} servers enabled',
+        'mcpFeature.pending.off': 'No MCP servers yet — add one on the MCP page',
         'feature.error': 'Could not save. Try again.',
-        'control.panel.label': 'Control panel',
-        'control.panel.title': 'Control panel',
+        'control.panel.label': 'MAGICAL MIRAI',
+        'control.panel.title': 'Home',
         'control.panel.subtitle': 'Change settings and customize the plugin\'s features.',
-        'control.panel.tab.dashboard': 'Control panel',
+        'control.panel.tab.dashboard': 'Home',
         'control.panel.tab.memory': 'Memory',
         'control.panel.tab.lan': 'LAN access',
         'control.panel.tab.skills': 'Skills',
@@ -372,12 +446,73 @@ window.__ModuleLoader__.load({
         'agent.saveFailed': 'Could not save. Try again.',
         'agent.readFailed': 'Could not read AGENTS.md. Refresh the page to retry.',
         'mcp.tab.title': 'MCP',
-        'mcp.tab.subtitle': 'Configure Model Context Protocol server connections.',
+        'mcp.tab.subtitle': 'Manage Model Context Protocol servers in the ChatGPT/Codex mcp_servers format.',
         'mcp.placeholder.title': 'No servers yet',
         'mcp.placeholder.text': 'Added MCP servers show their connection status and tools here.',
+        'mcp.add': 'Add server',
+        'mcp.add.hint': 'Add one in the ChatGPT/Codex mcp_servers format',
+        'mcp.count': '{count} servers · {enabled} enabled',
+        'mcp.bar.matched': ' · {count} matched',
+        'mcp.search.placeholder': 'Search servers',
+        'mcp.search.label': 'Search servers',
+        'mcp.empty': 'No MCP servers yet. Use the card above to add the first one, Codex-style.',
+        'mcp.empty.search': 'No matching servers.',
+        'mcp.refresh': 'Refresh server list',
+        'mcp.readFailed': 'Reading the MCP server list failed; reload the page and retry.',
+        'mcp.transport.stdio': 'stdio (local process)',
+        'mcp.transport.streamable_http': 'streamable_http (remote service)',
+        'mcp.enabled.on': 'Enabled (synced into the running Harness)',
+        'mcp.enabled.off': 'Disabled (kept here, not written into the config)',
+        'mcp.enabled.enable': 'Enable',
+        'mcp.enabled.disable': 'Disable',
+        'mcp.enabled.switch': '{action} MCP server: {name}',
+        'mcp.applied.reloaded': 'Synced into the running Harness (effective immediately).',
+        'mcp.applied.failed': 'Written to mcp.json, but syncing into the running Harness failed: {message}',
+        'mcp.applied.restart': 'Written to mcp.json; this entry needs a Harness restart to take effect.',
+        'mcp.edit': 'Edit',
+        'mcp.details': 'Details',
+        'mcp.delete': 'Remove',
+        'mcp.confirmDelete': 'Confirm removal',
+        'mcp.new.title': 'Add MCP server',
+        'mcp.new.desc': 'Fill in the ChatGPT/Codex mcp_servers fields; copy the config from the details view afterwards.',
+        'mcp.edit.title': 'Edit MCP server',
+        'mcp.edit.desc': 'The fields match the Codex [mcp_servers.<name>] table; saving writes mcp.json.',
+        'mcp.field.name': 'Name',
+        'mcp.field.name.hint': '1–32 letters, digits, _ or -; maps to [mcp_servers.<name>]',
+        'mcp.field.transport': 'Transport',
+        'mcp.field.command': 'Command',
+        'mcp.field.command.hint': 'Executable that starts the server, e.g. npx or python',
+        'mcp.field.args': 'Arguments',
+        'mcp.field.args.hint': 'Space-separated; quote arguments containing spaces',
+        'mcp.field.envVars': 'Forwarded env vars',
+        'mcp.field.envVars.hint': 'One variable name per line; forwarded from the local environment',
+        'mcp.field.env': 'Extra env vars',
+        'mcp.field.env.hint': 'One KEY = value per line; copied into the server process',
+        'mcp.field.cwd': 'Working directory',
+        'mcp.field.cwd.hint': 'Optional; where the server starts',
+        'mcp.field.url': 'URL',
+        'mcp.field.url.hint': 'Streamable HTTP endpoint',
+        'mcp.field.bearer': 'Bearer token env var',
+        'mcp.field.bearer.hint': 'The variable name only (e.g. GITHUB_TOKEN); the token value itself is never stored',
+        'mcp.field.headers': 'Extra headers',
+        'mcp.field.headers.hint': 'One NAME = value per line; sent with every request',
+        'mcp.field.startupTimeout': 'Startup timeout (s)',
+        'mcp.field.startupTimeout.hint': 'Default 10',
+        'mcp.field.toolTimeout': 'Tool timeout (s)',
+        'mcp.field.toolTimeout.hint': 'Default 60',
+        'mcp.error.name': 'The name must be 1–32 letters, digits, _ or -.',
+        'mcp.error.command': 'A stdio server needs a command.',
+        'mcp.error.url': 'The URL must start with http:// or https://.',
+        'mcp.error.table': 'Write one NAME = value per line.',
+        'mcp.error.timeout': 'The timeout must be 0–600 seconds.',
+        'mcp.detail.codex': 'Codex / ChatGPT (config.toml)',
+        'mcp.detail.dsh': 'This Harness (cordis.patch.yml entry)',
+        'mcp.detail.copy': 'Copy',
+        'mcp.detail.copied': 'Copied',
+        'mcp.close': 'Close',
         'memory.tab.title': 'Memory',
         'memory.tab.subtitle': 'Durable facts the agent remembers across sessions, stored locally.',
-        'memory.offNotice': 'Long-term memory is currently off. Enable it on the Control panel page.',
+        'memory.offNotice': 'Long-term memory is currently off. Enable it on the MAGICAL MIRAI page.',
         'memory.add.placeholder': 'Add a memory, e.g. "User prefers concise replies…"',
         'memory.addCard': 'New memory',
         'memory.addCard.hint': 'Create a memory',
@@ -430,6 +565,7 @@ window.__ModuleLoader__.load({
     const STYLE_MEMORY = `${PACKAGE_NAME}/memory-panel.css`;
     const STYLE_LAN = `${PACKAGE_NAME}/lan-panel.css`;
     const STYLE_SKILLS = `${PACKAGE_NAME}/skills-panel.css`;
+    const STYLE_MCP = `${PACKAGE_NAME}/mcp-panel.css`;
     const STYLE_AGENT = `${PACKAGE_NAME}/agent-panel.css`;
 
     /** Install (or find) one package-owned style tag. */
@@ -825,6 +961,12 @@ window.__ModuleLoader__.load({
 
     /** Entry type vocabulary, aligned with the Host engine. */
     const MEMORY_TYPES = ['user', 'feedback', 'project', 'reference'];
+    /** Valid MCP server name: the Codex `[mcp_servers.<name>]` key budget. */
+    const MCP_NAME_PATTERN = /^[A-Za-z0-9_-]{1,32}$/;
+    /** The two transports the Codex standard defines, in dialog order. */
+    const MCP_TRANSPORT_KEYS = ['stdio', 'streamable_http'];
+    /** Shown beside the count row: where the Host stores the servers. */
+    const MCP_DOC_DISPLAY = '~/.dsh/dsh-mikufan/mcp.json';
     const memoryListeners = new Set();
     /** @type {Array<object>} */
     let memoryEntries = [];
@@ -1218,6 +1360,200 @@ window.__ModuleLoader__.load({
     /** Reveal one SKILL.md in the platform file manager. */
     async function revealSkillViaHost(id) {
       return callHost(`skills/${encodeURIComponent(id)}/reveal`, { method: 'POST', headers: { accept: 'application/json' } });
+    }
+
+    // ---------------------------------------------------------------------
+    // MCP: the store behind the MCP page. The Host owns the Codex-standard
+    // `mcp_servers` document (`~/.dsh/dsh-mikufan/mcp.json`); this half reads
+    // the list and updates optimistically, the same way Skills does.
+    // ---------------------------------------------------------------------
+
+    const mcpListeners = new Set();
+    /** @type {Array<object>} */
+    let mcpServers = [];
+    /** Whether the first Host read has completed. */
+    let mcpLoaded = false;
+    /** Whether the one-time read failure was already reported. */
+    let mcpReadFailureReported = false;
+    /** Whether the read retries are exhausted (the page then shows a hint). */
+    let mcpReadGaveUp = false;
+
+    function subscribeMcp(listener) {
+      mcpListeners.add(listener);
+      return () => {
+        mcpListeners.delete(listener);
+      };
+    }
+
+    function getMcpServers() {
+      return mcpServers;
+    }
+
+    function isMcpLoaded() {
+      return mcpLoaded;
+    }
+
+    function isMcpReadFailed() {
+      return mcpReadGaveUp;
+    }
+
+    function emitMcp() {
+      for (const listener of [...mcpListeners]) listener();
+    }
+
+    /** Adopt one Host list payload (`{ servers }`). */
+    function replaceMcpServers(value) {
+      if (Array.isArray(value?.servers)) {
+        mcpServers = value.servers.filter(
+          (server) => server !== null && typeof server === 'object' && typeof server.name === 'string',
+        );
+      }
+      mcpLoaded = true;
+      emitMcp();
+    }
+
+    function upsertMcpServer(server) {
+      if (server === null || typeof server !== 'object' || typeof server.name !== 'string') return;
+      const index = mcpServers.findIndex((candidate) => candidate.name === server.name);
+      if (index === -1) {
+        mcpServers = [...mcpServers, server];
+      } else {
+        const next = [...mcpServers];
+        next[index] = server;
+        mcpServers = next;
+      }
+      emitMcp();
+    }
+
+    function dropMcpServer(name) {
+      const next = mcpServers.filter((server) => server.name !== name);
+      if (next.length === mcpServers.length) return;
+      mcpServers = next;
+      emitMcp();
+    }
+
+    /** Read the MCP server list from the Host. @returns whether the read worked. */
+    async function adoptHostMcp() {
+      try {
+        const value = await callHost('mcp', { method: 'GET', headers: { accept: 'application/json' } });
+        mcpReadGaveUp = false;
+        replaceMcpServers(value);
+        return true;
+      } catch (error) {
+        if (!mcpReadFailureReported) {
+          mcpReadFailureReported = true;
+          console.warn('[dsh-mikufan] could not read the MCP server list:', error);
+        }
+        return false;
+      }
+    }
+
+    /** First load, retried a few times across a slow boot (every page does this). */
+    function hydrateMcp(attempt = 0) {
+      void adoptHostMcp().then((ok) => {
+        if (ok) return;
+        if (attempt < 3) {
+          setTimeout(() => hydrateMcp(attempt + 1), 400 * (attempt + 1));
+          return;
+        }
+        mcpReadGaveUp = true;
+        emitMcp();
+      });
+    }
+
+    /** Create one server from the panel dialog (optimistic apply + rollback). */
+    async function createMcpViaHost(draft) {
+      let optimistic = false;
+      try {
+        const value = await callHost('mcp', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(draft),
+        });
+        if (value?.server !== null && typeof value?.server === 'object') upsertMcpServer(value.server);
+        return value?.server ?? null;
+      } catch (error) {
+        optimistic = true;
+        throw error;
+      } finally {
+        if (optimistic) dropMcpServer(draft?.name);
+      }
+    }
+
+    /** Replace one server (the edit dialog; a rename moves the card). */
+    async function updateMcpViaHost(name, draft) {
+      const previous = mcpServers.find((server) => server.name === name);
+      try {
+        const value = await callHost(`mcp/${encodeURIComponent(name)}`, {
+          method: 'PATCH',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(draft),
+        });
+        if (value?.server !== null && typeof value?.server === 'object') {
+          // A rename moves the card: drop the old key, insert the new record.
+          if (typeof name === 'string' && name !== value.server.name) dropMcpServer(name);
+          upsertMcpServer(value.server);
+        }
+        return value?.server ?? null;
+      } catch (error) {
+        if (previous !== undefined) upsertMcpServer(previous);
+        throw error;
+      }
+    }
+
+    /**
+     * Flip one server's enabled flag with optimistic apply + rollback. The
+     * Host answer carries the sync outcome (`server.applied`): `reloaded`
+     * means the running composition entry followed the flag, `absent` means
+     * no such entry exists (document-only change), `failed`/`restart-required`
+     * surface as a card error line.
+     */
+    async function patchMcpEnabledViaHost(name, enabled) {
+      const previous = mcpServers.find((server) => server.name === name);
+      if (previous !== undefined) upsertMcpServer({ ...previous, enabled, applied: undefined, applyError: undefined });
+      try {
+        const value = await callHost(`mcp/${encodeURIComponent(name)}/enabled`, {
+          method: 'PATCH',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ enabled }),
+        });
+        if (value?.server !== null && typeof value?.server === 'object') upsertMcpServer(value.server);
+        return value?.server ?? null;
+      } catch (error) {
+        if (previous !== undefined) upsertMcpServer(previous);
+        throw error;
+      }
+    }
+
+    /** The card error line for one enable-sync outcome; '' when nothing to say. */
+    function mcpAppliedNotice(translate, server) {
+      if (server?.applied === 'failed') {
+        return formatTemplate(translate('mcp.applied.failed', '已写入 mcp.json，但同步到运行中的 Harness 失败：{message}'), {
+          message: server.applyError ?? '',
+        });
+      }
+      if (server?.applied === 'restart-required') {
+        return translate('mcp.applied.restart', '已写入 mcp.json；该条目需要重启 Harness 才能生效。');
+      }
+      return '';
+    }
+
+    /** Remove one server with optimistic apply + rollback. */
+    async function deleteMcpViaHost(name) {
+      const index = mcpServers.findIndex((server) => server.name === name);
+      const previous = index === -1 ? undefined : mcpServers[index];
+      dropMcpServer(name);
+      try {
+        await callHost(`mcp/${encodeURIComponent(name)}`, { method: 'DELETE' });
+      } catch (error) {
+        if (previous !== undefined) {
+          const next = [...mcpServers];
+          next.splice(Math.min(index, next.length), 0, previous);
+          mcpServers = next;
+          emitMcp();
+        }
+        throw error;
+      }
     }
 
     installStyle(
@@ -1815,39 +2151,62 @@ window.__ModuleLoader__.load({
       return text;
     }
 
-    /** 48px globe for the IP-address card. */
+    /**
+     * 48px location-pin glyph for the IP-address card (the user's supplied
+     * icon): a pin holding an "IP" monogram, single-color via `currentColor`
+     * at the svg root. The source paths are 1024-based; the geometry is
+     * unchanged, the missing fills come from the root.
+     */
     function IpIcon() {
       return h(
         'svg',
-        { width: 48, height: 48, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 1.5, strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': true },
-        h('circle', { cx: 12, cy: 12, r: 8.2 }),
-        h('path', { d: 'M3.8 12h16.4' }),
-        h('ellipse', { cx: 12, cy: 12, rx: 3.6, ry: 8.2 }),
+        { width: 48, height: 48, viewBox: '0 0 1024 1024', fill: 'currentColor', 'aria-hidden': true },
+        h('path', {
+          d: 'M512.77824 993.75104L352.256 751.5136A375.808 375.808 0 0 1 136.56064 411.66848C136.54016 204.63616 304.96768 36.20864 512 36.20864c207.01184 0 375.43936 168.42752 375.43936 375.45984 0 151.08096-88.63744 285.32736-226.69312 344.82176l-147.968 237.2608zM512 97.64864c-173.1584 0-314.01984 140.86144-314.01984 314.01984a314.34752 314.34752 0 0 0 187.41248 287.45728l8.23296 3.62496 117.59616 177.41824 107.9296-173.056 9.33888-3.72736a312.70912 312.70912 0 0 0 197.5296-291.71712C825.99936 238.51008 685.13792 97.64864 512 97.64864z',
+        }),
+        h('path', { d: 'M380.55936 294.74816h43.95008V562.3808h-43.95008V294.74816z' }),
+        h('path', { d: 'M434.74944 572.6208h-64.43008V284.50816h64.43008V572.6208z m-43.95008-20.48h23.47008V304.98816h-23.47008V552.1408z' }),
+        h('path', {
+          d: 'M604.22144 458.9568h-72.41728v103.424h-45.21984V293.45792h120.23808c58.61376 2.58048 90.05056 29.73696 94.37184 81.44896-0.88064 55.17312-33.21856 83.18976-96.9728 84.04992z m-3.8912-125.41952h-68.54656v86.60992h68.54656c37.04832 0 55.6032-15.07328 55.6032-45.24032-1.7408-26.70592-20.2752-40.50944-55.6032-41.3696z',
+        }),
+        h('path', {
+          d: 'M542.04416 572.6208h-65.69984V283.21792h130.47808c80.54784 3.54304 101.2736 51.34336 104.57088 90.84928-0.6144 43.29472-19.72224 93.96224-107.02848 95.1296h-62.32064v103.424z m-45.24032-20.48h24.73984v-103.424h82.65728c58.34752-0.77824 85.93408-24.28928 86.71232-73.95328-3.87072-45.79328-30.76096-68.68992-84.60288-71.0656h-109.52704V552.1408z m103.5264-121.73312h-78.78656v-107.08992h78.78656c51.77344 1.26976 64.34816 28.40576 65.82272 50.93376 0.02048 21.38112-8.54016 56.15616-65.82272 56.15616z m-58.28608-20.48h58.30656c40.20224 0 45.3632-18.71872 45.3632-35.00032-0.83968-12.53376-6.49216-30.18752-45.60896-31.1296h-58.0608v66.12992z',
+        }),
       );
     }
 
-    /** 48px wall-socket glyph for the port card. */
+    /**
+     * 48px wall-plate glyph for the port card (the user's supplied icon): an
+     * Ethernet wall socket, single-color via `currentColor` at the svg root.
+     * The source path is 1024-based; the geometry is unchanged, the missing
+     * fill comes from the root.
+     */
     function PortIcon() {
       return h(
         'svg',
-        { width: 48, height: 48, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 1.5, strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': true },
-        h('rect', { x: 4, y: 4, width: 16, height: 16, rx: 3 }),
-        h('circle', { cx: 9.6, cy: 11, r: 1 }),
-        h('circle', { cx: 14.4, cy: 11, r: 1 }),
-        h('path', { d: 'M9.8 14.8h4.4' }),
+        { width: 48, height: 48, viewBox: '0 0 1024 1024', fill: 'currentColor', 'aria-hidden': true },
+        h('path', {
+          d: 'M0 64l0 832 960 0L960 64 0 64zM896 832 64 832 64 128l832 0L896 832zM832 384l-128 0L704 256l-64 0L640 192 320 192l0 64L256 256l0 128L128 384l0 384 704 0L832 384zM768 704 192 704 192 448l64 0 64 0L320 384 320 320l64 0L384 256l192 0 0 64 64 0 0 64 0 64 64 0 64 0L768 704zM256 512l64 0 0 128L256 640 256 512zM384 512l64 0 0 128L384 640 384 512zM512 512l64 0 0 128L512 640 512 512zM640 512l64 0 0 128-64 0L640 512z',
+        }),
       );
     }
 
-    /** 48px devices glyph for the connection-cap card. */
+    /**
+     * 48px link-chain glyph for the connection-cap card (the user's supplied
+     * icon): two interlocking chain halves, single-color via `currentColor`
+     * at the svg root. The source paths are 1024-based; the geometry is
+     * unchanged, the hardcoded fills were removed.
+     */
     function DevicesIcon() {
       return h(
         'svg',
-        { width: 48, height: 48, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 1.5, strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': true },
-        h('rect', { x: 2.6, y: 4.6, width: 12.2, height: 8.8, rx: 1.4 }),
-        h('path', { d: 'M6.6 17.4h4.2' }),
-        h('path', { d: 'M8.7 13.4v4' }),
-        h('rect', { x: 16.4, y: 7.6, width: 5, height: 12, rx: 1.3 }),
-        h('path', { d: 'M17.9 17.3h1.1' }),
+        { width: 48, height: 48, viewBox: '0 0 1024 1024', fill: 'currentColor', 'aria-hidden': true },
+        h('path', {
+          d: 'M861.866667 164.266667c-87.466667-87.466667-230.4-89.6-320-2.133334l-68.266667 68.266667c-12.8 12.8-12.8 32 0 44.8s32 12.8 44.8 0l68.266667-68.266667c64-61.866667 166.4-61.866667 230.4 2.133334 64 64 64 168.533333 2.133333 232.533333l-117.333333 119.466667c-34.133333 34.133333-81.066667 51.2-128 49.066666-46.933333-4.266667-91.733333-27.733333-119.466667-66.133333-10.666667-14.933333-29.866667-17.066667-44.8-6.4-14.933333 10.666667-17.066667 29.866667-6.4 44.8 40.533333 53.333333 100.266667 87.466667 166.4 91.733333h17.066667c59.733333 0 119.466667-23.466667 162.133333-68.266666l117.333333-119.466667c83.2-89.6 83.2-234.666667-4.266666-322.133333z',
+        }),
+        h('path', {
+          d: 'M505.6 750.933333l-66.133333 68.266667c-64 61.866667-166.4 61.866667-230.4-2.133333-64-64-64-168.533333-2.133334-232.533334l117.333334-119.466666c34.133333-34.133333 81.066667-51.2 128-49.066667 46.933333 4.266667 91.733333 27.733333 119.466666 66.133333 10.666667 14.933333 29.866667 17.066667 44.8 6.4 14.933333-10.666667 17.066667-29.866667 6.4-44.8-40.533333-53.333333-100.266667-87.466667-166.4-91.733333-66.133333-4.266667-130.133333 19.2-177.066666 66.133333l-117.333334 119.466667c-85.333333 89.6-85.333333 234.666667 2.133334 322.133333 44.8 44.8 102.4 66.133333 162.133333 66.133334 57.6 0 115.2-21.333333 160-64l66.133333-68.266667c12.8-12.8 12.8-32 0-44.8-14.933333-10.666667-34.133333-10.666667-46.933333 2.133333z',
+        }),
       );
     }
 
@@ -2414,6 +2773,1086 @@ window.__ModuleLoader__.load({
 .MikufanSkillPreviewHint{padding:18px;font-size:12px;line-height:18px;color:var(--dsw-alias-label-tertiary)}
 `,
     );
+
+    // ---------------------------------------------------------------------
+    // MCP page: the Codex-standard mcp_servers list as a card grid. One card
+    // per server — first line the name, second line the transport + endpoint
+    // (`stdio` 命令 or streamable_http url), the header switch is the entry's
+    // `enabled` flag, the footer 编辑 / 详情 / 删除. Creating and editing
+    // happen in the McpDialog popup; 详情 opens the McpDetailOverlay, whose
+    // body shows the Codex TOML and the dsh-mcp-client YAML transcription.
+    // ---------------------------------------------------------------------
+
+    installStyle(
+      STYLE_MCP,
+      `
+.MikufanMcpPanel{display:flex;flex-direction:column;min-height:0;gap:14px}
+.MikufanMcpBar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;font-size:12px;line-height:18px;color:var(--dsw-alias-label-tertiary)}
+.MikufanMcpBarRoot{min-width:0;overflow-wrap:anywhere}
+.MikufanMcpTools{display:flex;align-items:center;gap:8px;flex:none;margin-left:auto}
+.MikufanMcpGroup{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;align-items:stretch}
+.MikufanMcpGroup[data-empty=true]{grid-template-columns:minmax(0,1fr)}
+@media (max-width:700px){.MikufanMcpGroup{grid-template-columns:minmax(0,1fr)}}
+.MikufanMcpEmpty{margin:0;text-align:center;font-size:12px;line-height:18px;color:var(--dsw-alias-label-tertiary)}
+.MikufanMcpCard{display:flex;flex-direction:column;gap:10px;min-width:0;padding:16px 18px 12px;border:1px solid var(--dsw-alias-border-l1);border-radius:var(--dsw-radius-lg);background:var(--dsw-alias-bg-layer-1);box-shadow:0 1px 3px rgba(0,0,0,.04);transition:transform .15s ease,box-shadow .15s ease}
+.MikufanMcpCard:hover{transform:translateY(-1px);box-shadow:0 4px 14px rgba(0,0,0,.07)}
+.MikufanMcpCardHead{display:flex;align-items:flex-start;gap:8px;min-width:0}
+.MikufanMcpCardHead .MikufanSwitch{margin-left:auto;margin-top:1px}
+.MikufanMcpName{margin:0;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:15px;font-weight:600;line-height:22px;letter-spacing:-.01em;color:var(--dsw-alias-label-primary)}
+.MikufanMcpDesc{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;margin:0;font-size:12px;line-height:18px;color:var(--dsw-alias-label-secondary);word-break:break-all}
+.MikufanMcpCard[data-disabled=true] .MikufanMcpName{color:var(--dsw-alias-label-tertiary)}
+.MikufanMcpCard[data-disabled=true] .MikufanMcpDesc{color:var(--dsw-alias-label-tertiary)}
+.MikufanMcpCardFoot{display:flex;align-items:center;gap:2px;margin-top:auto;padding-top:10px;border-top:1px solid var(--dsw-alias-border-l1)}
+.MikufanMcpAction{display:inline-flex;align-items:center;gap:5px;padding:3px 8px;border:0;border-radius:var(--dsw-radius-sm);background:transparent;color:var(--dsw-alias-label-secondary);font-family:inherit;font-size:12px;line-height:18px;cursor:pointer}
+.MikufanMcpAction:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}
+.MikufanMcpAction:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:1px}
+.MikufanMcpAction:disabled{opacity:.5;cursor:not-allowed}
+.MikufanMcpAction svg{width:14px;height:14px}
+.MikufanMcpActionDanger{color:var(--dsw-alias-label-tertiary)}
+.MikufanMcpActionDanger:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover-danger);color:var(--dsw-alias-state-error-primary)}
+.MikufanMcpActionArmed{background:var(--dsw-alias-interactive-bg-hover-danger);color:var(--dsw-alias-state-error-primary)}
+.MikufanMcpErrorLine{margin:-4px 0 0;font-size:12px;line-height:18px;color:var(--dsw-alias-state-error-primary)}
+.MikufanMcpAppliedLine{margin:-4px 0 0;font-size:12px;line-height:18px;color:var(--dsw-alias-state-success-primary,var(--dsw-alias-label-secondary))}
+/* Dialog: the memory dialog's overlay idiom, two columns wide for the fields. */
+.MikufanMcpMask{position:fixed;inset:0;z-index:1010;display:flex;align-items:center;justify-content:center;padding:24px;background:var(--dsw-alias-bg-mask-1);backdrop-filter:var(--dsw-mask-blur,blur(4px));-webkit-backdrop-filter:var(--dsw-mask-blur,blur(4px));animation:MikufanMemFade .16s ease-out}
+.MikufanMcpDialog{display:flex;flex-direction:column;gap:14px;box-sizing:border-box;width:min(620px,100%);max-height:min(84vh,760px);overflow:auto;padding:18px 20px 16px;border:0;border-radius:var(--dsw-radius-panel);background:var(--dsw-alias-bg-layer-2);box-shadow:var(--dsw-elevation-prominent,0 18px 48px rgba(0,0,0,.22));animation:MikufanMemPop .16s ease-out}
+@media (prefers-reduced-motion:reduce){.MikufanMcpMask,.MikufanMcpDialog{animation:none}}
+.MikufanMcpDialogHead{display:flex;align-items:flex-start;gap:12px}
+.MikufanMcpDialogHeadText{flex:1;min-width:0}
+.MikufanMcpDialogTitle{margin:0;font-size:16px;font-weight:600;line-height:24px;letter-spacing:-.01em;color:var(--dsw-alias-label-primary)}
+.MikufanMcpDialogDesc{margin:3px 0 0;font-size:12px;line-height:18px;color:var(--dsw-alias-label-secondary)}
+.MikufanMcpFieldGrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+@media (max-width:700px){.MikufanMcpFieldGrid{grid-template-columns:minmax(0,1fr)}}
+.MikufanMcpField{display:flex;flex-direction:column;gap:6px;min-width:0}
+.MikufanMcpFieldSpan{grid-column:1 / -1}
+.MikufanMcpFieldLabel{font-size:12px;line-height:18px;color:var(--dsw-alias-label-secondary)}
+.MikufanMcpFieldHint{font-size:11px;line-height:16px;color:var(--dsw-alias-label-tertiary)}
+.MikufanMcpInput{box-sizing:border-box;width:100%;height:30px;padding:0 10px;border:1px solid var(--dsw-alias-border-l2);border-radius:var(--dsw-radius-sm);background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-primary);font-family:inherit;font-size:13px;line-height:18px}
+.MikufanMcpInput::placeholder{color:var(--dsw-alias-label-quaternary,var(--dsw-alias-label-tertiary))}
+.MikufanMcpInput:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:1px;border-color:var(--dsw-alias-brand-primary)}
+.MikufanMcpInput[data-over=true]{border-color:var(--dsw-alias-state-error-primary)}
+.MikufanMcpTextarea{box-sizing:border-box;width:100%;min-height:64px;max-height:32vh;padding:8px 10px;border:1px solid var(--dsw-alias-border-l2);border-radius:var(--dsw-radius-sm);background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-primary);font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:12px;line-height:18px;resize:vertical}
+.MikufanMcpTextarea::placeholder{color:var(--dsw-alias-label-quaternary,var(--dsw-alias-label-tertiary))}
+.MikufanMcpTextarea:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:1px;border-color:var(--dsw-alias-brand-primary)}
+.MikufanMcpTypes{display:flex;flex-wrap:wrap;gap:6px}
+.MikufanMcpTypeChip{padding:4px 12px;border:.5px solid var(--dsw-alias-border-l2);border-radius:999px;background:transparent;color:var(--dsw-alias-label-secondary);font-family:inherit;font-size:12px;line-height:18px;cursor:pointer}
+.MikufanMcpTypeChip:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}
+.MikufanMcpTypeChip:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:1px}
+.MikufanMcpTypeChip[aria-checked=true]{border-color:var(--dsw-alias-brand-primary);background:var(--dsw-alias-interactive-bg-active);color:var(--dsw-alias-brand-primary)}
+.MikufanMcpError{display:flex;align-items:center;gap:8px;padding:9px 12px;border:1px solid var(--dsw-alias-border-l1);border-radius:var(--dsw-radius-md);background:var(--dsw-alias-bg-layer-1);font-size:12px;line-height:18px;color:var(--dsw-alias-state-error-primary)}
+.MikufanMcpDialogFoot{display:flex;align-items:center;justify-content:flex-end;gap:8px;margin-top:2px}
+/* Detail overlay: the Skills detail idiom — header, scrolling body, footer. */
+.MikufanMcpDetail{display:flex;flex-direction:column;box-sizing:border-box;width:min(760px,100%);max-height:min(88vh,920px);overflow:hidden;border:0;border-radius:var(--dsw-radius-panel);background:var(--dsw-alias-bg-layer-2);box-shadow:var(--dsw-elevation-prominent,0 18px 48px rgba(0,0,0,.22));animation:MikufanMemPop .16s ease-out}
+.MikufanMcpDetailHead{display:flex;align-items:flex-start;gap:12px;padding:18px 20px 14px;border-bottom:1px solid var(--dsw-alias-border-l1)}
+.MikufanMcpDetailText{flex:1;min-width:0}
+.MikufanMcpDetailTitle{margin:0;font-size:20px;font-weight:600;line-height:28px;letter-spacing:-.01em;color:var(--dsw-alias-label-primary);overflow-wrap:anywhere}
+.MikufanMcpDetailDesc{margin:4px 0 0;font-size:13px;line-height:20px;color:var(--dsw-alias-label-secondary);overflow-wrap:anywhere}
+.MikufanMcpDetailBody{flex:1;min-height:0;overflow:auto;padding:18px 22px 24px;font-size:13px;line-height:22px;color:var(--dsw-alias-label-primary)}
+.MikufanMcpDetailFoot{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 20px;border-top:1px solid var(--dsw-alias-border-l1)}
+.MikufanMcpCodeHead{display:flex;align-items:center;gap:8px;margin:14px 0 6px}
+.MikufanMcpCodeHead:first-child{margin-top:0}
+.MikufanMcpCodeTitle{font-size:12px;font-weight:600;line-height:18px;color:var(--dsw-alias-label-secondary)}
+.MikufanMcpCopyButton{padding:1px 8px;font-size:11px;line-height:16px;border:.5px solid var(--dsw-alias-border-l2);border-radius:999px;background:transparent;color:var(--dsw-alias-label-secondary);cursor:pointer;font-family:inherit}
+.MikufanMcpCopyButton:hover{color:var(--dsw-alias-label-primary);background:var(--dsw-alias-interactive-bg-hover)}
+.MikufanMcpCopyButton:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:2px}
+.MikufanMcpDangerButton{height:30px;padding:0 14px;border:0;border-radius:var(--dsw-radius-md);background:transparent;color:var(--dsw-alias-label-tertiary);font-family:inherit;font-size:13px;line-height:20px;cursor:pointer}
+.MikufanMcpDangerButton:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover-danger);color:var(--dsw-alias-state-error-primary)}
+.MikufanMcpDangerButton:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:1px}
+.MikufanMcpDangerButton:disabled{opacity:.5;cursor:not-allowed}
+`,
+    );
+
+    /** transport chip text for one server card. */
+    function mcpTransportLabel(translate, server) {
+      return server.transport === 'stdio'
+        ? translate('mcp.transport.stdio', 'stdio（本地进程）')
+        : translate('mcp.transport.streamable_http', 'streamable_http（远程服务）');
+    }
+
+    /** The one-line endpoint shown under a card's name. */
+    function mcpEndpointText(server) {
+      return server.transport === 'stdio' ? server.command : server.url;
+    }
+
+    /**
+     * One MCP server as a rounded card in the memory/skills idiom: the header
+     * row is the name plus the `enabled` switch, the body shows the transport
+     * chip and the endpoint, and the footer is 编辑 / 详情 / 删除 (two-step).
+     */
+    function McpCard(props) {
+      const { server, translate, onEdit, onDetails } = props;
+      const [busy, setBusy] = useState(false);
+      const [error, setError] = useState('');
+      const [armed, setArmed] = useState(false);
+      // The enable-sync outcome (reloaded / absent / failed / restart-required)
+      // arrives on the server record after a toggle; it stays visible until the
+      // next toggle or reload replaces the record.
+      const applied = server.applied;
+      const appliedNotice = mcpAppliedNotice(translate, server);
+      const enabledLabel = server.enabled
+        ? translate('mcp.enabled.on', '已启用（写进 Codex 配置后可用）')
+        : translate('mcp.enabled.off', '已停用（保留条目，不写入配置）');
+      const excerpt = mcpEndpointText(server);
+      const switchLabel = formatTemplate(translate('mcp.enabled.switch', '{action}MCP 服务器：{name}'), {
+        action: server.enabled ? translate('mcp.enabled.disable', '停用') : translate('mcp.enabled.enable', '启用'),
+        name: server.name,
+      });
+
+      useEffect(() => {
+        if (!armed) return undefined;
+        const timer = setTimeout(() => setArmed(false), 3000);
+        return () => clearTimeout(timer);
+      }, [armed]);
+
+      const run = (operation) => {
+        if (busy) return;
+        setBusy(true);
+        setError('');
+        Promise.resolve()
+          .then(operation)
+          .catch((cause) => setError(memoryErrorText(translate, cause)))
+          .finally(() => setBusy(false));
+      };
+      const onDelete = () => {
+        if (busy) return;
+        if (!armed) {
+          setArmed(true);
+          return;
+        }
+        setArmed(false);
+        run(() => deleteMcpViaHost(server.name));
+      };
+
+      return h(
+        'div',
+        { className: 'MikufanMcpCard', 'data-disabled': server.enabled ? 'false' : 'true' },
+        h(
+          'div',
+          { className: 'MikufanMcpCardHead' },
+          h('h3', { className: 'MikufanMcpName' }, server.name),
+          h(
+            'button',
+            {
+              type: 'button',
+              role: 'switch',
+              className: 'MikufanSwitch',
+              'aria-checked': server.enabled,
+              'aria-label': switchLabel,
+              title: enabledLabel,
+              disabled: busy,
+              onClick: () => run(() => patchMcpEnabledViaHost(server.name, !server.enabled)),
+            },
+            h('span', { className: 'MikufanSwitchThumb' }),
+          ),
+        ),
+        h(
+          'div',
+          { className: 'MikufanMcpBody' },
+          h('span', { className: 'MikufanMemTag' }, mcpTransportLabel(translate, server)),
+          h('div', { className: 'MikufanMcpDesc' }, mcpEndpointText(server)),
+        ),
+        h(
+          'div',
+          { className: 'MikufanMcpCardFoot' },
+          h(
+            'button',
+            { type: 'button', className: 'MikufanMcpAction', disabled: busy, onClick: () => onEdit(server) },
+            h(PencilIcon, null),
+            translate('mcp.edit', '编辑'),
+          ),
+          h(
+            'button',
+            { type: 'button', className: 'MikufanMcpAction', disabled: busy, onClick: () => onDetails(server) },
+            h(InfoIcon, null),
+            translate('mcp.details', '详情'),
+          ),
+          h(
+            'button',
+            {
+              type: 'button',
+              className: `MikufanMcpAction MikufanMcpActionDanger${armed ? ' MikufanMcpActionArmed' : ''}`,
+              disabled: busy,
+              title: armed ? translate('mcp.confirmDelete', '确认删除') : translate('mcp.delete', '删除'),
+              onClick: onDelete,
+            },
+            h(CrossIcon, null),
+            armed ? translate('mcp.confirmDelete', '确认删除') : translate('mcp.delete', '删除'),
+          ),
+        ),
+        error !== '' ? h('div', { className: 'MikufanMcpErrorLine', role: 'alert' }, error) : null,
+        appliedNotice !== ''
+          ? h('div', { className: 'MikufanMcpErrorLine', role: 'alert' }, appliedNotice)
+          : applied === 'reloaded'
+            ? h('div', { className: 'MikufanMcpAppliedLine', role: 'status' }, translate('mcp.applied.reloaded', '已同步到运行中的 Harness（立即生效）。'))
+            : null,
+      );
+    }
+
+    /**
+     * One labeled dialog field; `wide` spans both grid columns. The control
+     * travels in the `content` prop (not `children`): this client half's
+     * element stub carries children outside `props`, so a component cannot
+     * read its own children.
+     */
+    function McpField(props) {
+      const { label, hint, wide, content } = props;
+      return h(
+        'div',
+        { className: 'MikufanMcpField' + (wide ? ' MikufanMcpFieldSpan' : '') },
+        h('span', { className: 'MikufanMcpFieldLabel' }, label),
+        content,
+        typeof hint === 'string' && hint !== '' ? h('span', { className: 'MikufanMcpFieldHint' }, hint) : null,
+      );
+    }
+
+    /**
+     * Parse one `KEY = value` per line (or `{ "KEY": "value", … }`) table.
+     * Values run to the separator or end of line; surrounding quotes are
+     * optional and stripped, so `DEBUG = 1`, `KEY = "value"` and an inline
+     * `{ "A": "b" }` all parse — a word with no `=` (or an empty value) fails.
+     */
+    function parseStringTable(raw) {
+      const text = String(raw ?? '').trim();
+      if (text === '') return { ok: true, value: {} };
+      const inline = /^\{[\s\S]*\}$/.test(text) ? text.slice(1, -1) : text;
+      const value = {};
+      const pattern = /["']?([A-Za-z0-9_.-]+)["']?\s*[:=]\s*["']?([^;"']*)["']?/g;
+      let match;
+      while ((match = pattern.exec(inline)) !== null) {
+        const key = match[1].trim();
+        const item = match[2].trim();
+        if (key !== '' && item !== '') value[key] = item;
+      }
+      if (Object.keys(value).length === 0) return { ok: false };
+      return { ok: true, value };
+    }
+
+    /** Parse one whitespace-separated list of bare words. */
+    function parseWordList(raw) {
+      const words = String(raw ?? '')
+        .split(/[\s,]+/)
+        .filter((word) => word !== '');
+      return words.length > 0 ? { ok: true, value: words } : { ok: true, value: [] };
+    }
+
+    /** Parse one newline-separated list of bare words (env_vars / args). */
+    function parseLineList(raw) {
+      const words = String(raw ?? '')
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter((line) => line !== '');
+      return words.length > 0 ? { ok: true, value: words } : { ok: true, value: [] };
+    }
+
+    /** Parse one optional positive float (the two timeout fields). */
+    function parseTimeout(raw) {
+      const text = String(raw ?? '').trim();
+      if (text === '') return { ok: true, value: undefined };
+      const value = Number(text);
+      if (!Number.isFinite(value) || value <= 0 || value > 600) return { ok: false };
+      return { ok: true, value };
+    }
+
+    /**
+     * The create/edit dialog: the memory dialog's idiom carrying the Codex
+     * fields — name, transport chips, the per-transport block (stdio:
+     * command/args/env/env_vars/cwd; streamable_http:
+     * url/bearer_token_env_var/http_headers), the two timeouts, and a
+     * `Ctrl/Cmd+Enter` save. Blank optional fields are dropped on save.
+     */
+    function McpDialog(props) {
+      const { mode, server, translate, onClose } = props;
+      const editing = mode === 'edit' && server !== null && server !== undefined;
+      const isStdio = editing ? server.transport === 'stdio' : true;
+      const [name, setName] = useState(editing ? server.name : '');
+      const [transport, setTransport] = useState(isStdio ? 'stdio' : 'streamable_http');
+      const [command, setCommand] = useState(editing && server.command ? server.command : '');
+      const [args, setArgs] = useState(editing && Array.isArray(server.args) ? server.args.join(' ') : '');
+      const [env, setEnv] = useState(editing && server.env ? mcpFormatTable(server.env) : '');
+      const [envVars, setEnvVars] = useState(editing && Array.isArray(server.env_vars) ? server.env_vars.join('\n') : '');
+      const [cwd, setCwd] = useState(editing && typeof server.cwd === 'string' ? server.cwd : '');
+      const [url, setUrl] = useState(editing && typeof server.url === 'string' ? server.url : '');
+      const [bearer, setBearer] = useState(editing && typeof server.bearer_token_env_var === 'string' ? server.bearer_token_env_var : '');
+      const [headers, setHeaders] = useState(editing && server.http_headers ? mcpFormatTable(server.http_headers) : '');
+      const [startupTimeout, setStartupTimeout] = useState(editing && typeof server.startup_timeout_sec === 'number' ? String(server.startup_timeout_sec) : '');
+      const [toolTimeout, setToolTimeout] = useState(editing && typeof server.tool_timeout_sec === 'number' ? String(server.tool_timeout_sec) : '');
+      const [busy, setBusy] = useState(false);
+      const [error, setError] = useState('');
+      const [touched, setTouched] = useState(false);
+
+      const nameOk = MCP_NAME_PATTERN.test(name.trim());
+      const commandOk = transport !== 'stdio' || command.trim() !== '';
+      const urlOk = transport === 'stdio' || /^https?:\/\//i.test(url.trim());
+      const tableOk = (raw) => parseStringTable(raw).ok;
+      const timeoutOk = (raw) => parseTimeout(raw).ok;
+      const draft = () => {
+        const payload = { name: name.trim(), transport };
+        if (transport === 'stdio') {
+          payload.command = command.trim();
+          const argList = parseWordList(args);
+          if (argList.value.length > 0) payload.args = argList.value;
+          const envTable = parseStringTable(env);
+          if (Object.keys(envTable.value ?? {}).length > 0) payload.env = envTable.value;
+          const varList = parseLineList(envVars);
+          if (varList.value.length > 0) payload.env_vars = varList.value;
+          const directory = cwd.trim();
+          if (directory !== '') payload.cwd = directory;
+        } else {
+          payload.url = url.trim();
+          const token = bearer.trim();
+          if (token !== '') payload.bearer_token_env_var = token;
+          const headerTable = parseStringTable(headers);
+          if (Object.keys(headerTable.value ?? {}).length > 0) payload.http_headers = headerTable.value;
+        }
+        const startup = parseTimeout(startupTimeout);
+        if (startup.value !== undefined) payload.startup_timeout_sec = startup.value;
+        const tool = parseTimeout(toolTimeout);
+        if (tool.value !== undefined) payload.tool_timeout_sec = tool.value;
+        return payload;
+      };
+      const canSave = !busy && nameOk && commandOk && urlOk && tableOk(env) && tableOk(headers) && timeoutOk(startupTimeout) && timeoutOk(toolTimeout);
+      const title = editing ? translate('mcp.edit.title', '编辑 MCP 服务器') : translate('mcp.new.title', '添加 MCP 服务器');
+      const description = editing
+        ? translate('mcp.edit.desc', '字段与 Codex 的 [mcp_servers.<名称>] 一致，保存后写入 mcp.json。')
+        : translate('mcp.new.desc', '按 ChatGPT/Codex 的 mcp_servers 标准填写；保存后可在详情里复制配置。');
+
+      useEffect(() => {
+        const onKeyDown = (event) => {
+          if (event.key === 'Escape') {
+            event.stopPropagation();
+            if (!busy) onClose();
+            return;
+          }
+          if (event.key !== 'Tab') return;
+          const root = memoryDialogElement;
+          if (root === null || typeof root.querySelectorAll !== 'function') return;
+          const items = [...root.querySelectorAll(MEMORY_FOCUSABLE)];
+          if (items.length === 0) return;
+          const first = items[0];
+          const last = items[items.length - 1];
+          const active = document.activeElement;
+          const inside = active !== null && typeof root.contains === 'function' && root.contains(active);
+          if (event.shiftKey && (!inside || active === first)) {
+            event.preventDefault();
+            last.focus();
+          } else if (!event.shiftKey && (!inside || active === last)) {
+            event.preventDefault();
+            first.focus();
+          }
+        };
+        document.addEventListener('keydown', onKeyDown);
+        return () => document.removeEventListener('keydown', onKeyDown);
+      }, [busy, onClose]);
+
+      useEffect(() => {
+        const previousOverflow = document.body.style.overflow;
+        document.body.style.overflow = 'hidden';
+        return () => {
+          document.body.style.overflow = previousOverflow;
+          memoryDialogElement = null;
+          const target = memoryDialogReturnFocus;
+          memoryDialogReturnFocus = null;
+          if (target !== null && target !== undefined && typeof target.focus === 'function' && target.isConnected !== false) {
+            target.focus();
+          }
+        };
+      }, []);
+
+      const save = () => {
+        setTouched(true);
+        if (!canSave) return;
+        setBusy(true);
+        setError('');
+        const payload = draft();
+        const operation = editing ? updateMcpViaHost(server.name, payload) : createMcpViaHost(payload);
+        Promise.resolve(operation)
+          .then(() => onClose())
+          .catch((cause) => setError(memoryErrorText(translate, cause)))
+          .finally(() => setBusy(false));
+      };
+
+      let pressedOnBackdrop = false;
+      const dialog = h(
+        'div',
+        {
+          className: 'MikufanMcpMask',
+          onMouseDown: (event) => {
+            pressedOnBackdrop = event.target === event.currentTarget;
+          },
+          onClick: (event) => {
+            const startedOnBackdrop = pressedOnBackdrop;
+            pressedOnBackdrop = false;
+            if (startedOnBackdrop && event.target === event.currentTarget && !busy) onClose();
+          },
+        },
+        h(
+          'div',
+          {
+            className: 'MikufanMcpDialog',
+            role: 'dialog',
+            'aria-modal': 'true',
+            'aria-labelledby': 'mikufan-mcp-dialog-title',
+            ref: (node) => {
+              memoryDialogElement = node;
+            },
+          },
+          h(
+            'div',
+            { className: 'MikufanMcpDialogHead' },
+            h(
+              'div',
+              { className: 'MikufanMcpDialogHeadText' },
+              h('h2', { className: 'MikufanMcpDialogTitle', id: 'mikufan-mcp-dialog-title' }, title),
+              h('p', { className: 'MikufanMcpDialogDesc' }, description),
+            ),
+            h(
+              'button',
+              {
+                type: 'button',
+                className: 'MikufanMemClose',
+                title: translate('mcp.close', '关闭'),
+                'aria-label': translate('mcp.close', '关闭'),
+                disabled: busy,
+                onClick: onClose,
+              },
+              h(CrossIcon, null),
+            ),
+          ),
+          h(
+            'div',
+            { className: 'MikufanMcpFieldGrid' },
+            h(McpField, {
+              label: translate('mcp.field.name', '名称'),
+              hint: translate('mcp.field.name.hint', '1–32 位字母、数字、_ 或 -；对应 [mcp_servers.<名称>]'),
+              content: h('input', {
+                className: 'MikufanMcpInput',
+                value: name,
+                placeholder: 'github',
+                autoFocus: true,
+                spellCheck: false,
+                maxLength: 32,
+                'data-over': touched && !nameOk ? 'true' : 'false',
+                disabled: busy,
+                onChange: (event) => setName(event.target.value),
+              }),
+            }),
+            h(McpField, {
+              label: translate('mcp.field.transport', '传输方式'),
+              content: h(
+                'div',
+                { className: 'MikufanMcpTypes', role: 'radiogroup', 'aria-label': translate('mcp.field.transport', '传输方式') },
+                MCP_TRANSPORT_KEYS.map((candidate) =>
+                  h(
+                    'button',
+                    {
+                      key: candidate,
+                      type: 'button',
+                      role: 'radio',
+                      className: 'MikufanMcpTypeChip',
+                      'aria-checked': transport === candidate,
+                      'data-transport': candidate,
+                      disabled: busy,
+                      onClick: () => setTransport(candidate),
+                    },
+                    mcpTransportLabel(translate, { transport: candidate }),
+                  ),
+                ),
+              ),
+            }),
+            transport === 'stdio'
+              ? h(McpField, {
+                  label: translate('mcp.field.command', '命令'),
+                  hint: translate('mcp.field.command.hint', '启动服务器的可执行文件，例如 npx 或 python'),
+                  content: h('input', {
+                    className: 'MikufanMcpInput',
+                    value: command,
+                    placeholder: 'npx',
+                    spellCheck: false,
+                    'data-over': touched && !commandOk ? 'true' : 'false',
+                    disabled: busy,
+                    onChange: (event) => setCommand(event.target.value),
+                  }),
+                })
+              : h(McpField, {
+                  label: translate('mcp.field.url', 'URL'),
+                  hint: translate('mcp.field.url.hint', 'Streamable HTTP 端点地址'),
+                  content: h('input', {
+                    className: 'MikufanMcpInput',
+                    value: url,
+                    placeholder: 'https://api.example.com/mcp/',
+                    spellCheck: false,
+                    'data-over': touched && !urlOk ? 'true' : 'false',
+                    disabled: busy,
+                    onChange: (event) => setUrl(event.target.value),
+                  }),
+                }),
+            transport === 'stdio'
+              ? h(McpField, {
+                  label: translate('mcp.field.args', '参数'),
+                  hint: translate('mcp.field.args.hint', '空格分隔；含空格的参数用引号包裹'),
+                  content: h('input', {
+                    className: 'MikufanMcpInput',
+                    value: args,
+                    placeholder: '-y @modelcontextprotocol/server-github',
+                    spellCheck: false,
+                    disabled: busy,
+                    onChange: (event) => setArgs(event.target.value),
+                  }),
+                })
+              : h(McpField, {
+                  label: translate('mcp.field.bearer', 'Bearer 令牌环境变量'),
+                  hint: translate('mcp.field.bearer.hint', '只填变量名（如 GITHUB_TOKEN），令牌值本身不落盘'),
+                  content: h('input', {
+                    className: 'MikufanMcpInput',
+                    value: bearer,
+                    placeholder: 'GITHUB_TOKEN',
+                    spellCheck: false,
+                    disabled: busy,
+                    onChange: (event) => setBearer(event.target.value),
+                  }),
+                }),
+            transport === 'stdio'
+              ? h(McpField, {
+                  label: translate('mcp.field.envVars', '转发环境变量'),
+                  hint: translate('mcp.field.envVars.hint', '每行一个变量名；从本机环境原样转发'),
+                  content: h('textarea', {
+                    className: 'MikufanMcpTextarea',
+                    value: envVars,
+                    placeholder: 'GITHUB_TOKEN\nGITHUB_HOST',
+                    spellCheck: false,
+                    disabled: busy,
+                    onChange: (event) => setEnvVars(event.target.value),
+                  }),
+                })
+              : null,
+            transport === 'stdio'
+              ? h(McpField, {
+                  label: translate('mcp.field.env', '附加环境变量'),
+                  hint: translate('mcp.field.env.hint', '每行 KEY = value；复制进服务器进程'),
+                  content: h('textarea', {
+                    className: 'MikufanMcpTextarea',
+                    value: env,
+                    placeholder: 'DEBUG = 1',
+                    spellCheck: false,
+                    'data-over': touched && !tableOk(env) ? 'true' : 'false',
+                    disabled: busy,
+                    onChange: (event) => setEnv(event.target.value),
+                  }),
+                })
+              : h(McpField, {
+                  label: translate('mcp.field.headers', '附加请求头'),
+                  hint: translate('mcp.field.headers.hint', '每行 NAME = value；随请求发送'),
+                  content: h('textarea', {
+                    className: 'MikufanMcpTextarea',
+                    value: headers,
+                    placeholder: 'X-Example = value',
+                    spellCheck: false,
+                    'data-over': touched && !tableOk(headers) ? 'true' : 'false',
+                    disabled: busy,
+                    onChange: (event) => setHeaders(event.target.value),
+                  }),
+                }),
+            transport === 'stdio'
+              ? h(McpField, {
+                  label: translate('mcp.field.cwd', '工作目录'),
+                  hint: translate('mcp.field.cwd.hint', '可选；服务器的启动目录'),
+                  content: h('input', {
+                    className: 'MikufanMcpInput',
+                    value: cwd,
+                    placeholder: 'D:\\path\\to\\server',
+                    spellCheck: false,
+                    disabled: busy,
+                    onChange: (event) => setCwd(event.target.value),
+                  }),
+                })
+              : null,
+            h(McpField, {
+              label: translate('mcp.field.startupTimeout', '启动超时（秒）'),
+              hint: translate('mcp.field.startupTimeout.hint', '默认 10'),
+              content: h('input', {
+                className: 'MikufanMcpInput',
+                value: startupTimeout,
+                placeholder: '10',
+                inputMode: 'decimal',
+                'data-over': touched && !timeoutOk(startupTimeout) ? 'true' : 'false',
+                disabled: busy,
+                onChange: (event) => setStartupTimeout(event.target.value),
+              }),
+            }),
+            h(McpField, {
+              label: translate('mcp.field.toolTimeout', '工具超时（秒）'),
+              hint: translate('mcp.field.toolTimeout.hint', '默认 60'),
+              content: h('input', {
+                className: 'MikufanMcpInput',
+                value: toolTimeout,
+                placeholder: '60',
+                inputMode: 'decimal',
+                'data-over': touched && !timeoutOk(toolTimeout) ? 'true' : 'false',
+                disabled: busy,
+                onChange: (event) => setToolTimeout(event.target.value),
+              }),
+            }),
+          ),
+          touched && !nameOk
+            ? h('div', { className: 'MikufanMcpError', role: 'alert' }, translate('mcp.error.name', '名称需为 1–32 位字母、数字、_ 或 -。'))
+            : touched && !commandOk
+              ? h('div', { className: 'MikufanMcpError', role: 'alert' }, translate('mcp.error.command', 'stdio 服务器需要填写命令。'))
+              : touched && !urlOk
+                ? h('div', { className: 'MikufanMcpError', role: 'alert' }, translate('mcp.error.url', 'URL 必须以 http:// 或 https:// 开头。'))
+                : touched && (!tableOk(env) || !tableOk(headers))
+                  ? h('div', { className: 'MikufanMcpError', role: 'alert' }, translate('mcp.error.table', '键值表每行写 NAME = value。'))
+                  : touched && (!timeoutOk(startupTimeout) || !timeoutOk(toolTimeout))
+                    ? h('div', { className: 'MikufanMcpError', role: 'alert' }, translate('mcp.error.timeout', '超时必须是 0–600 之间的秒数。'))
+                    : null,
+          error !== '' ? h('div', { className: 'MikufanMcpError', role: 'alert' }, error) : null,
+          h(
+            'div',
+            { className: 'MikufanMcpDialogFoot' },
+            h(
+              'button',
+              { type: 'button', className: 'MikufanMemBtn', disabled: busy, onClick: onClose },
+              translate('memory.cancel', '取消'),
+            ),
+            h(
+              'button',
+              { type: 'button', className: 'MikufanMemBtn MikufanMemBtnPrimary', disabled: !canSave, onClick: save },
+              editing ? translate('memory.save', '保存') : translate('memory.create', '创建'),
+            ),
+          ),
+        ),
+      );
+
+      const canPortal =
+        typeof document !== 'undefined' && ReactDOM !== undefined && typeof ReactDOM.createPortal === 'function';
+      return canPortal ? ReactDOM.createPortal(dialog, document.body) : dialog;
+    }
+
+    /** Render the `KEY = value` rows of one table for the textarea placeholders. */
+    function mcpFormatTable(table) {
+      return Object.entries(table ?? {})
+        .map(([key, value]) => `${key} = ${value}`)
+        .join('\n');
+    }
+
+    /** TOML value writer for the detail overlay: strings quoted, arrays inline. */
+    function mcpTomlValue(value) {
+      if (Array.isArray(value)) return `[${value.map((item) => mcpTomlValue(item)).join(', ')}]`;
+      if (value === true) return 'true';
+      if (value === false) return 'false';
+      if (typeof value === 'number') return String(value);
+      return JSON.stringify(String(value));
+    }
+
+    /**
+     * The Codex TOML block for one server — the exact `[mcp_servers.<name>]`
+     * table the ChatGPT desktop app, the Codex CLI and the IDE extension read.
+     */
+    function mcpCodexToml(server) {
+      const lines = [`[${'mcp_servers'}.${server.name}]`];
+      if (server.enabled === false) lines.push('enabled = false');
+      for (const key of ['command', 'url']) {
+        if (typeof server[key] === 'string') lines.push(`${key} = ${mcpTomlValue(server[key])}`);
+      }
+      if (Array.isArray(server.args) && server.args.length > 0) lines.push(`args = ${mcpTomlValue(server.args)}`);
+      if (server.env && Object.keys(server.env).length > 0) lines.push(`env = { ${Object.entries(server.env).map(([key, value]) => `${JSON.stringify(key)} = ${mcpTomlValue(value)}`).join(', ')} }`);
+      if (Array.isArray(server.env_vars) && server.env_vars.length > 0) lines.push(`env_vars = ${mcpTomlValue(server.env_vars)}`);
+      if (typeof server.cwd === 'string') lines.push(`cwd = ${mcpTomlValue(server.cwd)}`);
+      if (typeof server.bearer_token_env_var === 'string') lines.push(`bearer_token_env_var = ${mcpTomlValue(server.bearer_token_env_var)}`);
+      if (server.http_headers && Object.keys(server.http_headers).length > 0) lines.push(`http_headers = { ${Object.entries(server.http_headers).map(([key, value]) => `${JSON.stringify(key)} = ${mcpTomlValue(value)}`).join(', ')} }`);
+      if (typeof server.startup_timeout_sec === 'number') lines.push(`startup_timeout_sec = ${server.startup_timeout_sec}`);
+      if (typeof server.tool_timeout_sec === 'number') lines.push(`tool_timeout_sec = ${server.tool_timeout_sec}`);
+      return lines.join('\n');
+    }
+
+    /** The equivalent `@deepseek-ai/dsh-mcp-client` entry for this profile's cordis patch. */
+    function mcpDshYaml(server) {
+      const lines = ['- id: mcp-' + server.name.toLowerCase().replace(/[^a-z0-9-]/g, '-'), "  name: '@deepseek-ai/dsh-mcp-client'", '  config:'];
+      lines.push(`    serverName: ${server.name}`);
+      lines.push(`    transport: ${server.transport === 'streamable_http' ? 'streamable-http' : 'stdio'}`);
+      if (server.transport === 'stdio') {
+        lines.push(`    command: ${JSON.stringify(server.command)}`);
+        if (Array.isArray(server.args) && server.args.length > 0) {
+          lines.push('    args:');
+          for (const item of server.args) lines.push(`      - ${JSON.stringify(item)}`);
+        }
+        if (server.env && Object.keys(server.env).length > 0) {
+          lines.push('    env:');
+          for (const [key, value] of Object.entries(server.env)) lines.push(`      ${key}: ${JSON.stringify(value)}`);
+        }
+      } else {
+        lines.push(`    url: ${JSON.stringify(server.url)}`);
+        if (server.http_headers && Object.keys(server.http_headers).length > 0) {
+          lines.push('    headers:');
+          for (const [key, value] of Object.entries(server.http_headers)) lines.push(`      ${key}: ${JSON.stringify(value)}`);
+        }
+      }
+      if (typeof server.tool_timeout_sec === 'number') lines.push(`    toolCallTimeoutMs: ${Math.round(server.tool_timeout_sec * 1000)}`);
+      return lines.join('\n');
+    }
+
+    /** Copy one snippet and flip the copied flag back after a moment. */
+    function useCopyFlash() {
+      const [copied, setCopied] = useState('');
+      const copy = (event, key, text) => {
+        event.stopPropagation();
+        const finish = () => {
+          setTimeout(() => setCopied(''), 1600);
+        };
+        try {
+          if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+            navigator.clipboard
+              .writeText(text)
+              .then(() => {
+                setCopied(key);
+                finish();
+              })
+              .catch(() => finish());
+            return;
+          }
+        } catch {
+          /* clipboard unavailable: stay silent */
+        }
+        setCopied(key);
+        finish();
+      };
+      return [copied, copy];
+    }
+
+    /**
+     * The detail overlay: the reference sketch's header/body/footer shell.
+     * The body shows the Codex TOML and the dsh-mcp-client YAML snippets with
+     * copy buttons; the footer is 删除 (two-step) and 关闭.
+     */
+    function McpDetailOverlay(props) {
+      const { server, translate, onClose, onDelete } = props;
+      const [armed, setArmed] = useState(false);
+      const [copied, copy] = useCopyFlash();
+
+      useEffect(() => {
+        const onKeyDown = (event) => {
+          if (event.key === 'Escape') {
+            event.stopPropagation();
+            onClose();
+            return;
+          }
+          if (event.key !== 'Tab') return;
+          const root = memoryDialogElement;
+          if (root === null || typeof root.querySelectorAll !== 'function') return;
+          const items = [...root.querySelectorAll(MEMORY_FOCUSABLE)];
+          if (items.length === 0) return;
+          const first = items[0];
+          const last = items[items.length - 1];
+          const active = document.activeElement;
+          const inside = active !== null && typeof root.contains === 'function' && root.contains(active);
+          if (event.shiftKey && (!inside || active === first)) {
+            event.preventDefault();
+            last.focus();
+          } else if (!event.shiftKey && (!inside || active === last)) {
+            event.preventDefault();
+            first.focus();
+          }
+        };
+        document.addEventListener('keydown', onKeyDown);
+        return () => document.removeEventListener('keydown', onKeyDown);
+      }, [onClose]);
+
+      useEffect(() => {
+        const previousOverflow = document.body.style.overflow;
+        document.body.style.overflow = 'hidden';
+        return () => {
+          document.body.style.overflow = previousOverflow;
+          memoryDialogElement = null;
+          const target = memoryDialogReturnFocus;
+          memoryDialogReturnFocus = null;
+          if (target !== null && target !== undefined && typeof target.focus === 'function' && target.isConnected !== false) {
+            target.focus();
+          }
+        };
+      }, []);
+
+      const toml = mcpCodexToml(server);
+      const yaml = mcpDshYaml(server);
+      let pressedOnBackdrop = false;
+      const overlay = h(
+        'div',
+        {
+          className: 'MikufanMcpMask',
+          onMouseDown: (event) => {
+            pressedOnBackdrop = event.target === event.currentTarget;
+          },
+          onClick: (event) => {
+            const startedOnBackdrop = pressedOnBackdrop;
+            pressedOnBackdrop = false;
+            if (startedOnBackdrop && event.target === event.currentTarget) onClose();
+          },
+        },
+        h(
+          'div',
+          {
+            className: 'MikufanMcpDetail',
+            role: 'dialog',
+            'aria-modal': 'true',
+            'aria-labelledby': 'mikufan-mcp-detail-title',
+            ref: (node) => {
+              memoryDialogElement = node;
+            },
+          },
+          h(
+            'div',
+            { className: 'MikufanMcpDetailHead' },
+            h(
+              'div',
+              { className: 'MikufanMcpDetailText' },
+              h('h2', { className: 'MikufanMcpDetailTitle', id: 'mikufan-mcp-detail-title' }, server.name),
+              h('p', { className: 'MikufanMcpDetailDesc' }, mcpTransportLabel(translate, server)),
+            ),
+            h(
+              'button',
+              {
+                type: 'button',
+                className: 'MikufanMemClose',
+                title: translate('mcp.close', '关闭'),
+                'aria-label': translate('mcp.close', '关闭'),
+                onClick: onClose,
+              },
+              h(CrossIcon, null),
+            ),
+          ),
+          h(
+            'div',
+            { className: 'MikufanMcpDetailBody' },
+            h(
+              'div',
+              { className: 'MikufanMcpCodeHead' },
+              h('span', { className: 'MikufanMcpCodeTitle' }, translate('mcp.detail.codex', 'Codex / ChatGPT（config.toml）')),
+              h(
+                'button',
+                {
+                  type: 'button',
+                  className: 'MikufanMcpCopyButton',
+                  onClick: (event) => copy(event, 'toml', toml),
+                },
+                copied === 'toml' ? translate('mcp.detail.copied', '已复制') : translate('mcp.detail.copy', '复制'),
+              ),
+            ),
+            h('pre', { className: 'MikufanMdPre' }, toml),
+            h(
+              'div',
+              { className: 'MikufanMcpCodeHead' },
+              h('span', { className: 'MikufanMcpCodeTitle' }, translate('mcp.detail.dsh', '本机 Harness（cordis.patch.yml 条目）')),
+              h(
+                'button',
+                {
+                  type: 'button',
+                  className: 'MikufanMcpCopyButton',
+                  onClick: (event) => copy(event, 'yaml', yaml),
+                },
+                copied === 'yaml' ? translate('mcp.detail.copied', '已复制') : translate('mcp.detail.copy', '复制'),
+              ),
+            ),
+            h('pre', { className: 'MikufanMdPre' }, yaml),
+          ),
+          h(
+            'div',
+            { className: 'MikufanMcpDetailFoot' },
+            h(
+              'button',
+              {
+                type: 'button',
+                className: `MikufanMcpDangerButton${armed ? ' MikufanMcpActionArmed' : ''}`,
+                onClick: () => {
+                  if (!armed) {
+                    setArmed(true);
+                    return;
+                  }
+                  setArmed(false);
+                  onDelete(server);
+                },
+              },
+              armed ? translate('mcp.confirmDelete', '确认删除') : translate('mcp.delete', '删除'),
+            ),
+            h(
+              'button',
+              { type: 'button', className: 'MikufanMcpDangerButton', onClick: onClose },
+              translate('mcp.close', '关闭'),
+            ),
+          ),
+        ),
+      );
+
+      const canPortal =
+        typeof document !== 'undefined' && ReactDOM !== undefined && typeof ReactDOM.createPortal === 'function';
+      return canPortal ? ReactDOM.createPortal(overlay, document.body) : overlay;
+    }
+
+    /**
+     * The MCP page: the card grid in the dashboard's own idiom — first card
+     * the blank "+" card, one card per configured server, the count row with
+     * search and refresh on the right.
+     */
+    function McpPageBody({ translate }) {
+      const servers = useSyncExternalStore(subscribeMcp, getMcpServers);
+      const loaded = useSyncExternalStore(subscribeMcp, isMcpLoaded);
+      const readFailed = useSyncExternalStore(subscribeMcp, isMcpReadFailed);
+      /** `null` while closed, else `{ mode: 'create' }` or `{ mode: 'edit', name }`. */
+      const [dialog, setDialog] = useState(null);
+      /** The open detail overlay's server name, or null. */
+      const [detailName, setDetailName] = useState(null);
+      /** What the bar's search field filters the cards by. */
+      const [query, setQuery] = useState('');
+      /** A manual refresh is in flight. */
+      const [refreshing, setRefreshing] = useState(false);
+
+      useEffect(() => {
+        hydrateMcp();
+      }, []);
+
+      const enabledCount = servers.filter((server) => server.enabled).length;
+      const needle = query.trim().toLowerCase();
+      const visible =
+        needle === ''
+          ? servers
+          : servers.filter((server) =>
+              [server.name, server.transport, server.command ?? '', server.url ?? '', server.cwd ?? '']
+                .join('\n')
+                .toLowerCase()
+                .includes(needle),
+            );
+      const searching = needle !== '';
+
+      const onRefresh = () => {
+        if (refreshing) return;
+        setRefreshing(true);
+        void adoptHostMcp()
+          .then((ok) => {
+            if (ok) return;
+            mcpReadGaveUp = true;
+            emitMcp();
+          })
+          .finally(() => setRefreshing(false));
+      };
+      const openCreate = () => {
+        rememberDialogOpener();
+        setDialog({ mode: 'create' });
+      };
+      const openEdit = (server) => {
+        rememberDialogOpener();
+        setDialog({ mode: 'edit', name: server.name });
+      };
+      const closeDialog = () => setDialog(null);
+      const editingServer = dialog !== null && dialog.mode === 'edit' ? (servers.find((server) => server.name === dialog.name) ?? null) : null;
+      const detailServer = detailName === null ? null : (servers.find((server) => server.name === detailName) ?? null);
+
+      return h(
+        'div',
+        { role: 'tabpanel', 'aria-label': translate('control.panel.tab.mcp', 'MCP') },
+        h(PageHead, {
+          translate,
+          titleKey: 'mcp.tab.title',
+          fallbackTitle: 'MCP',
+          subtitleKey: 'mcp.tab.subtitle',
+          fallbackSubtitle: '配置 Model Context Protocol 服务器连接。',
+        }),
+        h(
+          'div',
+          { className: 'MikufanMcpPanel' },
+          readFailed
+            ? h('div', { className: 'MikufanMemoryNotice', role: 'alert' }, translate('mcp.readFailed', 'MCP 服务器列表读取失败，请刷新页面重试。'))
+            : null,
+          loaded && servers.length > 0
+            ? h(
+                'div',
+                { className: 'MikufanMcpBar' },
+                h(
+                  'span',
+                  { className: 'MikufanMcpBarRoot' },
+                  formatTemplate(translate('mcp.count', '共 {count} 个服务器 · {enabled} 个启用'), {
+                    count: servers.length,
+                    enabled: enabledCount,
+                  }) +
+                    (searching
+                      ? formatTemplate(translate('mcp.bar.matched', ' · 匹配 {count}'), { count: visible.length })
+                      : '') +
+                    ` · ${MCP_DOC_DISPLAY}`,
+                ),
+                h(
+                  'div',
+                  { className: 'MikufanMcpTools' },
+                  h(
+                    'label',
+                    { className: 'MikufanMemSearch' },
+                    h('span', { className: 'MikufanMemSearchIcon' }, h(SearchIcon, null)),
+                    h('input', {
+                      type: 'search',
+                      className: 'MikufanMemSearchInput',
+                      value: query,
+                      placeholder: translate('mcp.search.placeholder', '搜索服务器'),
+                      'aria-label': translate('mcp.search.label', '搜索服务器'),
+                      spellCheck: false,
+                      onChange: (event) => setQuery(event.target.value),
+                    }),
+                  ),
+                  h(
+                    'button',
+                    {
+                      type: 'button',
+                      className: 'MikufanMemRefresh',
+                      'data-busy': refreshing ? 'true' : 'false',
+                      title: translate('mcp.refresh', '刷新服务器列表'),
+                      'aria-label': translate('mcp.refresh', '刷新服务器列表'),
+                      disabled: refreshing,
+                      onClick: onRefresh,
+                    },
+                    h(RefreshIcon, null),
+                  ),
+                ),
+              )
+            : null,
+          h(
+            'div',
+            { className: 'MikufanMcpGroup', 'data-empty': !loaded || servers.length === 0 ? 'true' : 'false' },
+            h(MemoryAddCard, {
+              key: '__add__',
+              translate,
+              onClick: openCreate,
+              labelKey: 'mcp.add',
+              fallbackLabel: '添加服务器',
+              hintKey: 'mcp.add.hint',
+              fallbackHint: '按 ChatGPT/Codex 的 mcp_servers 标准新增',
+            }),
+            loaded ? visible.map((server) => h(McpCard, { key: server.name, server, translate, onEdit: openEdit, onDetails: (item) => setDetailName(item.name) })) : null,
+          ),
+          loaded && servers.length === 0
+            ? h('div', { className: 'MikufanMcpEmpty' }, translate('mcp.empty', '还没有 MCP 服务器。点击上方卡片，按 Codex 标准添加第一个。'))
+            : loaded && searching && visible.length === 0
+              ? h('div', { className: 'MikufanMcpEmpty' }, translate('mcp.empty.search', '没有匹配的服务器。'))
+              : null,
+          dialog !== null && dialog.mode === 'create'
+            ? h(McpDialog, { key: 'create', mode: 'create', server: null, translate, onClose: closeDialog })
+            : editingServer !== null
+              ? h(McpDialog, {
+                  key: `edit:${editingServer.name}`,
+                  mode: 'edit',
+                  server: editingServer,
+                  translate,
+                  onClose: closeDialog,
+                })
+              : null,
+          detailServer !== null
+            ? h(McpDetailOverlay, {
+                key: `detail:${detailServer.name}`,
+                server: detailServer,
+                translate,
+                onClose: () => setDetailName(null),
+                onDelete: (server) => {
+                  setDetailName(null);
+                  void deleteMcpViaHost(server.name).catch(() => {});
+                },
+              })
+            : null,
+        ),
+      );
+    }
 
     /** 14px panel glyph for the card's 打开 action. */
     function PanelOpenIcon() {
@@ -3113,7 +4552,7 @@ window.__ModuleLoader__.load({
 
     /** The six pages, in nav order. */
     const CONTROL_TABS = [
-      { id: 'dashboard', key: 'control.panel.tab.dashboard', fallback: '控制面板' },
+      { id: 'dashboard', key: 'control.panel.tab.dashboard', fallback: '主页' },
       { id: 'memory', key: 'control.panel.tab.memory', fallback: '记忆' },
       { id: 'lan', key: 'control.panel.tab.lan', fallback: '局域网访问' },
       { id: 'skills', key: 'control.panel.tab.skills', fallback: 'Skills' },
@@ -3162,59 +4601,109 @@ window.__ModuleLoader__.load({
       );
     }
 
-    /** 48px crescent glyph for the startup-animation card. */
+    /**
+     * 48px play-ring glyph for the startup-animation card (the user's supplied
+     * icon): a broken ring with an inner play triangle, single-color via
+     * `currentColor`. The source path is 1024-based; both subpaths keep their
+     * original geometry, only the fill color was localized.
+     */
     function SplashIcon() {
       return h(
         'svg',
-        { width: 48, height: 48, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 1.5, strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': true },
-        h('path', { d: 'M20 13.5A8 8 0 1 1 10.5 4 6.5 6.5 0 0 0 20 13.5z' }),
-        h('path', { d: 'M17 4.5l.5 1.5 1.5.5-1.5.5L17 8.5l-.5-1.5L15 6.5l1.5-.5z', fill: 'currentColor', stroke: 'none' }),
+        {
+          width: 48,
+          height: 48,
+          viewBox: '0 0 1024 1024',
+          fill: 'none',
+          'aria-hidden': true,
+        },
+        h('path', {
+          fill: 'currentColor',
+          d: 'M512 128c212.0704 0 384 171.9296 384 384 0 57.9328-12.8256 112.8448-35.7888 162.0992a34.4832 34.4832 0 0 1-31.744 21.1456 34.304 34.304 0 0 1-31.8208-47.104l1.3312-2.8672A314.24 314.24 0 0 0 827.392 512c0-174.208-141.2096-315.4176-315.4176-315.4176S196.5824 337.792 196.5824 512 337.792 827.4176 512 827.4176c52.864 0 102.6816-13.0048 146.432-35.968a34.304 34.304 0 0 1 32.0768 60.5184l0.0768 0.0768A382.336 382.336 0 0 1 512 896c-212.0704 0-384-171.9296-384-384 0-212.0704 171.9296-384 384-384z m-58.7776 195.9168c13.8496 0 27.3408 4.4032 38.5024 12.5952l167.2448 122.5472a65.152 65.152 0 0 1 0 105.088l-167.2448 122.5728a65.152 65.152 0 0 1-103.6288-52.5568v-245.0944a65.152 65.152 0 0 1 65.1264-65.152z m3.4304 71.9104v231.5776l158.0032-115.7888-158.0032-115.7888z',
+        }),
       );
     }
 
-    /** 48px brain glyph for the memory card. */
+    /**
+     * 48px brain glyph for the memory card (the user's supplied icon): the
+     * two-hemisphere brain, single-color via `currentColor`. The source path
+     * is 1024-based; the geometry is unchanged, only the fill color moved to
+     * the svg root.
+     */
     function MemoryIcon() {
       return h(
         'svg',
-        { width: 48, height: 48, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 1.5, strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': true },
-        h('path', { d: 'M12 4.5a2.8 2.8 0 0 0-2.7 2A2.8 2.8 0 0 0 6.4 9a3 3 0 0 0-1.4 5.4A2.9 2.9 0 0 0 8 19a2.9 2.9 0 0 0 4 1.1V4.5z' }),
-        h('path', { d: 'M12 4.5a2.8 2.8 0 0 1 2.7 2A2.8 2.8 0 0 1 17.6 9a3 3 0 0 1 1.4 5.4A2.9 2.9 0 0 1 16 19a2.9 2.9 0 0 1-4 1.1' }),
-        h('path', { d: 'M9.3 8.5c.8.4 1.3 1 1.4 2M9 12.6c.9.2 1.5.7 1.9 1.5' }),
-        h('path', { d: 'M14.7 8.5c-.8.4-1.3 1-1.4 2M15 12.6c-.9.2-1.5.7-1.9 1.5' }),
+        { width: 48, height: 48, viewBox: '0 0 1024 1024', fill: 'currentColor', 'aria-hidden': true },
+        h('path', {
+          d: 'M303.5392 51.2C387.9168 51.2 457.6 115.1488 468.0448 197.888a18.5344 18.5344 0 0 1 1.3824 6.8096v653.7216a19.6096 19.6096 0 0 1-3.7888 11.4688c-16.384 75.5712-82.7392 132.1472-162.0992 132.1472-91.5968 0-165.888-75.3664-165.888-168.3456l0.256-7.0656a165.2224 165.2224 0 0 1-14.8992-3.328C34.5344 799.232-17.9456 706.8672 5.76 616.96c8.704-32.8704 26.5728-61.2864 50.4832-82.688A169.8816 169.8816 0 0 1 5.7088 364.4416a166.8608 166.8608 0 0 1 133.4272-122.6752 166.0416 166.0416 0 0 1-1.536-22.1696C137.7024 126.5664 211.9936 51.2 303.5904 51.2z m0 84.1728c-45.7728 0-82.944 37.6832-82.944 84.224 0 16.0256 4.4032 31.2832 12.5952 44.544l-1.536-2.9184a42.5472 42.5472 0 0 1 7.5776 30.208l-0.7168 3.7376 0.3072-1.0752-0.256 1.0752-0.256 1.0752-0.1024 0.6656a43.3664 43.3664 0 0 1-1.3824 4.4032l-0.9216 2.1504a41.0624 41.0624 0 0 1-52.6336 22.3232 82.688 82.688 0 0 0-97.4336 60.416A84.3264 84.3264 0 0 0 144.4608 489.4208c12.2368 3.328 24.6784 3.7888 36.7104 1.4848l8.96-2.2528 4.6592-1.1776a41.4208 41.4208 0 0 1 47.104 29.0816 42.24 42.24 0 0 1-27.4944 52.6336 162.6112 162.6112 0 0 1-56.6784 7.168l-4.864 1.1264-6.3488 1.28c-29.1328 7.168-52.6848 29.8496-60.672 60.1088A84.3264 84.3264 0 0 0 144.4608 741.888c7.7824 2.0992 15.6672 3.072 23.552 2.8672l-5.2736-0.1536 0.1024-0.1536a41.1136 41.1136 0 0 1 57.1904-13.3632 42.496 42.496 0 0 1 15.4624 53.6576l-2.304 4.352a84.48 84.48 0 0 0-12.544 44.544c0 46.4896 37.12 84.1728 82.944 84.1728 45.7728 0 82.944-37.6832 82.944-84.1728v-256.3072c0-58.112-46.4384-105.2672-103.7312-105.2672a41.7792 41.7792 0 0 1-41.472-42.0864c0-23.2448 18.5856-42.0864 41.472-42.0864 38.4 0 74.0864 11.776 103.7312 31.9488V219.5968c0-46.5408-37.1712-84.224-82.944-84.224zM720.6144 51.2c-84.3776 0-154.0608 63.9488-164.5056 146.688a18.5344 18.5344 0 0 0-1.3824 6.8096v653.7216c0 4.1984 1.3824 8.0384 3.7888 11.4688 16.384 75.5712 82.7392 132.1472 162.0992 132.1472 91.5968 0 165.888-75.3664 165.888-168.3456l-0.256-7.0656c4.9664-0.8704 9.984-1.9968 14.8992-3.328 88.4736-24.064 140.9536-116.4288 117.248-206.2848a168.5504 168.5504 0 0 0-50.4832-82.688c45.6704-40.96 67.328-105.984 50.4832-169.8816a166.8608 166.8608 0 0 0-133.4272-122.6752c1.024-7.2704 1.536-14.6944 1.536-22.1696 0-93.0304-74.2912-168.3968-165.888-168.3968z m0 84.1728c45.7728 0 82.944 37.6832 82.944 84.224 0 16.0256-4.4032 31.2832-12.5952 44.544l1.536-2.9184a42.5472 42.5472 0 0 0-7.5776 30.208l0.7168 3.7376-0.3072-1.0752 0.256 1.0752 0.256 1.0752 0.1024 0.6656a43.3664 43.3664 0 0 0 1.3824 4.4032l0.9216 2.1504a41.0624 41.0624 0 0 0 52.6336 22.3232 82.688 82.688 0 0 1 97.4336 60.416 84.3264 84.3264 0 0 1-58.624 103.168 81.2032 81.2032 0 0 1-36.7104 1.4848l-8.96-2.2528-4.6592-1.1776a41.4208 41.4208 0 0 0-47.104 29.0816c-6.656 22.272 5.632 45.824 27.4944 52.6336 18.3808 5.6832 37.5296 8.1408 56.6784 7.168l4.864 1.1264 6.3488 1.28c29.1328 7.168 52.6848 29.8496 60.672 60.1088a84.3264 84.3264 0 0 1-58.624 103.1168c-7.7824 2.0992-15.6672 3.072-23.552 2.8672l5.2736-0.1536-0.1024-0.1536a41.1136 41.1136 0 0 0-57.1904-13.3632 42.496 42.496 0 0 0-15.4624 53.6576l2.304 4.352c8.192 13.2096 12.544 28.5184 12.544 44.544 0 46.4896-37.12 84.1728-82.944 84.1728-45.7728 0-82.944-37.6832-82.944-84.1728v-256.3072c0-58.112 46.4384-105.2672 103.7312-105.2672 22.8864 0 41.472-18.8416 41.472-42.0864a41.7792 41.7792 0 0 0-41.472-42.0864c-38.4 0-74.0864 11.776-103.7312 31.9488V219.5968c0-46.5408 37.1712-84.224 82.944-84.224z',
+        }),
       );
     }
 
-    /** 48px network glyph for the LAN-access card. */
+    /**
+     * 48px LAN glyph for the LAN-access card (the user's supplied icon): a
+     * broken ring with two endpoint dots plus a connected-nodes chart,
+     * single-color via `currentColor` at the svg root. The source paths are
+     * 1024-based; the geometry is unchanged, the hardcoded fills were removed.
+     */
     function LanIcon() {
       return h(
         'svg',
-        { width: 48, height: 48, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 1.5, strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': true },
-        h('rect', { x: 9, y: 3, width: 6, height: 6, rx: 1.2 }),
-        h('rect', { x: 3, y: 15, width: 6, height: 6, rx: 1.2 }),
-        h('rect', { x: 15, y: 15, width: 6, height: 6, rx: 1.2 }),
-        h('path', { d: 'M12 9v3' }),
-        h('path', { d: 'M6 15v-1.5a1.5 1.5 0 0 1 1.5-1.5h9a1.5 1.5 0 0 1 1.5 1.5V15' }),
+        { width: 48, height: 48, viewBox: '0 0 1024 1024', fill: 'currentColor', 'aria-hidden': true },
+        h('path', {
+          d: 'M514.048 72.704c72.192 0 142.336 17.408 204.8 50.688v0.512c0 32.768 26.112 58.88 58.88 58.88s58.88-26.112 58.88-58.88-26.112-58.88-58.88-58.88c-8.192 0-16.384 1.536-23.552 4.608-73.728-39.936-155.648-60.928-240.64-60.928C235.52 8.704 9.728 235.008 9.728 512.512c0 102.4 30.72 200.704 88.064 284.672l52.736-36.352c-50.176-73.216-76.8-159.232-76.8-248.832 0-242.176 197.632-439.296 440.32-439.296zM925.184 220.672l-52.224 36.864c53.248 74.752 81.408 162.816 81.408 254.464 0 242.688-197.632 439.808-439.808 439.808-74.752 0-146.944-18.432-211.456-53.76v-1.536c0-32.768-26.112-58.88-58.88-58.88s-58.88 26.112-58.88 58.88 26.112 58.88 58.88 58.88c7.68 0 15.36-1.536 22.528-4.608 75.264 42.496 160.256 65.024 247.808 65.024 278.016 0 503.808-226.304 503.808-503.808-0.512-104.96-32.768-205.824-93.184-291.328z',
+        }),
+        h('path', {
+          d: 'M723.456 482.816c39.936 0 72.192-32.256 72.192-72.192s-32.256-72.192-72.192-72.192-72.192 32.256-72.192 72.192c0 18.944 7.168 35.84 18.944 48.64L602.624 593.92c-2.048 0-3.584-0.512-5.632-0.512-10.24 0-19.968 2.56-28.672 7.168L471.04 509.952c0.512-3.072 1.024-5.632 1.024-8.704 0-29.696-24.064-53.76-53.76-53.76s-53.76 24.064-53.76 53.76c0 3.072 0.512 6.144 1.024 9.216l-91.136 84.48c-3.584-1.024-6.656-1.024-10.752-1.024-25.6 0-46.08 20.48-46.08 46.08s20.48 46.08 46.08 46.08 46.08-20.48 46.08-46.08c0-2.56 0-4.608-0.512-7.168l88.064-81.92c6.656 3.072 13.824 4.608 21.504 4.608s14.848-1.536 21.504-4.608l96.768 89.6c-1.536 5.12-2.048 10.752-2.048 16.384 0 34.816 28.16 62.976 62.976 62.976S660.48 691.2 660.48 656.384c0-14.336-4.608-27.136-12.8-37.888l68.608-136.192c2.56 0 5.12 0.512 7.168 0.512z',
+        }),
       );
     }
 
-    /** 48px sparkles glyph for the Skills summary card. */
+    /**
+     * 48px checklist glyph for the Skills summary card (the user's supplied
+     * icon): a document with list rows plus a checked circle, single-color
+     * via `currentColor` at the svg root. The source path is 1025-based; the
+     * geometry is unchanged, the missing fill comes from the root.
+     */
     function SkillsIcon() {
       return h(
         'svg',
-        { width: 48, height: 48, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 1.5, strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': true },
-        h('path', { d: 'M11 3.8l1.6 4.2 4.2 1.6-4.2 1.6L11 15.4l-1.6-4.2L5.2 9.6l4.2-1.6z' }),
-        h('path', { d: 'M18 14.2l.8 2.1 2.1.8-2.1.8-.8 2.1-.8-2.1-2.1-.8 2.1-.8z' }),
+        { width: 48, height: 48, viewBox: '0 0 1025 1024', fill: 'currentColor', 'aria-hidden': true },
+        h('path', {
+          d: 'M254.401252 745.6H520.801252a328 328 0 0 0 40 54.4H254.401252v-53.6z m0-84.8h231.2a358.4 358.4 0 0 1-10.4-53.6H254.401252v53.6z m0-137.6h221.6c2.4-18.4 5.6-36.8 10.4-53.6h-232v53.6z m431.2 358.4v46.4c0 22.4-16.8 40.8-37.6 40.8h-560c-20.8 0-37.6-18.4-37.6-40V249.6l185.6-168v178.4H138.401252v52.8h147.2V53.6h362.4c20.8 0 37.6 18.4 37.6 40v160c16-4.8 32-8 48.8-11.2V94.4C734.401252 42.4 696.801252 0 648.801252 0H249.601252L0.801252 224.8v704c0 51.2 39.2 93.6 86.4 93.6H648.801252c48 0 86.4-42.4 86.4-94.4v-35.2c-16-2.4-32.8-5.6-48.8-11.2zM187.201252 469.6h-64v53.6h64v-53.6z m-64 329.6h64v-53.6h-64v53.6z m64-192h-64v53.6h64V608zM904.801252 488l-39.2-32-99.2 140-89.6-74.4-30.4 42.4 128 107.2 130.4-184z m120 80c0-148.8-112-269.6-248.8-269.6-137.6 0-249.6 121.6-249.6 270.4 0 148.8 112 270.4 249.6 270.4C912.801252 838.4 1024.801252 716.8 1024.801252 568z m-49.6 0c0 120-89.6 217.6-200 217.6-109.6 0-200-97.6-200-216.8 0-120 90.4-216.8 200-216.8 110.4 0 200 96.8 200 216z',
+        }),
       );
     }
 
-    /** 48px terminal glyph for the Agent summary card. */
+    /**
+     * 48px file-badge glyph for the Agent summary card (the user's supplied
+     * icon): a document with an "MD" badge, single-color via `currentColor`
+     * at the svg root. The source path is 1024-based; the geometry is
+     * unchanged, the missing fill comes from the root.
+     */
     function AgentIcon() {
       return h(
         'svg',
-        { width: 48, height: 48, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 1.5, strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': true },
-        h('rect', { x: 3, y: 4.8, width: 18, height: 14.4, rx: 2 }),
-        h('path', { d: 'M7.2 9.8l2.9 2.4-2.9 2.4' }),
-        h('path', { d: 'M12.6 14.6h4.2' }),
+        { width: 48, height: 48, viewBox: '0 0 1024 1024', fill: 'currentColor', 'aria-hidden': true },
+        h('path', {
+          d: 'M354.40128 0c-87.04 0-157.44 70.55872-157.44 157.59872v275.68128H78.72c-21.6576 0-39.36256 17.69984-39.36256 39.36256v236.31872c0 21.6576 17.69984 39.35744 39.36256 39.35744h118.24128v118.08256c0 87.04 70.4 157.59872 157.44 157.59872h472.63744c87.04 0 157.59872-70.55872 157.59872-157.59872V315.0336c0-41.74848-38.9888-81.93024-107.52-149.27872l-29.11744-29.12256L818.87744 107.52C751.5392 38.9888 711.39328 0 669.59872 0H354.4064z m0 78.72h287.20128c28.35456 7.0912 27.99616 42.1376 27.99616 76.8v120.16128c0 21.6576 17.69984 39.35744 39.36256 39.35744h118.07744c39.38816 0 78.87872-0.0256 78.87872 39.36256v512c0 43.32032-35.55328 78.87872-78.87872 78.87872H354.4064c-43.32544 0-78.72-35.5584-78.72-78.87872v-118.08256h393.91744c21.66272 0 39.36256-17.69472 39.36256-39.35744V472.64256c0-21.66272-17.69984-39.36256-39.36256-39.36256H275.68128V157.59872c0-43.32032 35.39456-78.87872 78.72-78.87872zM195.9936 507.36128h32.64l49.92 143.03744h0.96256l48.95744-143.03744h33.60256v175.67744h-22.08256v-106.55744c0-10.88 0.32256-26.56256 0.96256-47.04256h-0.96256l-52.79744 153.6h-19.2l-52.80256-153.6h-0.95744c1.28 22.4 1.92 38.72256 1.92 48.96256v104.63744H195.9936V507.36128z m214.08256 0h48.95744c24.96 0 44.48256 7.68 58.56256 23.04 14.72 14.72 22.07744 35.84 22.07744 63.36 0 28.8-7.68 50.87744-23.04 66.23744-14.72 15.36-35.51744 23.04-62.39744 23.04h-44.16V507.36128z m22.07744 19.2v137.27744h19.2c21.76 0 37.76-5.76 48-17.28 10.88-11.52 16.32256-28.8 16.32256-51.84s-5.12-39.99744-15.36-50.87744c-9.6-11.52-24.32-17.28-44.16-17.28h-24.00256z',
+        }),
+      );
+    }
+
+    /**
+     * 48px plug glyph for the MCP summary card (the user's supplied icon):
+     * two mating connector halves, single-color via `currentColor` at the svg
+     * root. The source path is 1024-based; the geometry is unchanged, the
+     * missing fill comes from the root.
+     */
+    function McpIcon() {
+      return h(
+        'svg',
+        { width: 48, height: 48, viewBox: '0 0 1024 1024', fill: 'currentColor', 'aria-hidden': true },
+        h('path', {
+          d: 'M944.5376 124.416l-45.2096-45.2096a8.8576 8.8576 0 0 0-12.1344 0l-81.152 81.2032a213.248 213.248 0 0 0-270.4896 26.0096L427.0592 295.1168a8.5504 8.5504 0 0 0 0 12.0832l289.5872 289.5872a8.2944 8.2944 0 0 0 6.144 2.4576 9.1136 9.1136 0 0 0 5.9904-2.4576l108.6464-108.6464a213.248 213.248 0 0 0 26.0096-270.1312l81.2032-81.2032a8.5504 8.5504 0 0 0 0-12.0832l-0.1024-0.256z m-158.464 312.1152l-63.3344 63.3344-199.168-199.168 63.3344-63.2832a140.8 140.8 0 1 1 199.1168 199.1168zM583.168 548.352a8.5504 8.5504 0 0 0-11.9808 0L500.2752 619.52l-96.256-96.256 71.0656-71.0656a8.4992 8.4992 0 0 0 0-12.0832l-38.7072-38.8096a8.6016 8.6016 0 0 0-12.032 0l-71.168 71.168-45.824-45.824a8.448 8.448 0 0 0-6.1952-2.56 9.0112 9.0112 0 0 0-6.0416 2.56l-108.4928 108.544a213.248 213.248 0 0 0-26.0096 270.1824l-81.152 81.2032a8.6016 8.6016 0 0 0 0 11.9808l45.2608 45.2096c3.4304 3.2256 8.704 3.2256 12.1344 0l81.2032-81.2032a213.248 213.248 0 0 0 270.4384-26.0096l108.6464-108.544a8.6016 8.6016 0 0 0 2.5088-6.0416 8.5504 8.5504 0 0 0-2.56-5.632l-45.8752-45.7728 71.1168-71.168a8.5504 8.5504 0 0 0 0-11.9808l-39.1168-39.0656z m-146.176 237.056a140.8 140.8 0 1 1-199.168-199.1168l63.3344-63.3344 199.1168 199.2704-63.2832 63.1808z',
+        }),
       );
     }
 
@@ -3303,6 +4792,29 @@ window.__ModuleLoader__.load({
         enabled: loaded ? String(enabled) : '…',
         total: loaded ? String(entries.length) : '…',
       });
+      return h('div', { className: 'MikufanCpCardFoot' }, text);
+    }
+
+    /**
+     * Card footer for the MCP summary card: how many of the configured servers
+     * are enabled. Reads the same store the MCP page uses and hydrates it on
+     * mount, so the count appears without visiting the MCP page; an empty
+     * document shows a hint instead of a zero count.
+     */
+    function McpPendingFooter({ translate }) {
+      const servers = useSyncExternalStore(subscribeMcp, getMcpServers);
+      const loaded = useSyncExternalStore(subscribeMcp, isMcpLoaded);
+      useEffect(() => {
+        hydrateMcp();
+      }, []);
+      const enabled = servers.filter((server) => server.enabled === true).length;
+      const text =
+        loaded && servers.length === 0
+          ? translate('mcpFeature.pending.off', '还没有 MCP 服务器，在 MCP 页添加')
+          : formatTemplate(translate('mcpFeature.pending', '{enabled} / {total} 个服务器已启用'), {
+              enabled: loaded ? String(enabled) : '…',
+              total: loaded ? String(servers.length) : '…',
+            });
       return h('div', { className: 'MikufanCpCardFoot' }, text);
     }
 
@@ -3504,7 +5016,7 @@ window.__ModuleLoader__.load({
                 h('span', { className: 'MikufanSwitchThumb' }),
               ),
             ),
-            h('p', { className: 'MikufanCpCardDesc' }, translate('lanFeature.description', '允许局域网设备访问到 Harness')),
+            h('p', { className: 'MikufanCpCardDesc' }, translate('lanFeature.description', '允许局域网设备访问到 Harness。')),
             failed
               ? h('div', { className: 'MikufanCpCardError', role: 'alert' }, translate('lan.saveFailed', '保存失败，请重试。'))
               : null,
@@ -3514,14 +5026,14 @@ window.__ModuleLoader__.load({
       );
     }
 
-    /** The dashboard page: four switch cards plus the Skills / Agent summary cards. */
+    /** The dashboard page: four switch cards plus the Skills / Agent / MCP summary cards. */
     function DashboardPage({ translate }) {      return h(
         'div',
-        { role: 'tabpanel', 'aria-label': translate('control.panel.tab.dashboard', '控制面板') },
+        { role: 'tabpanel', 'aria-label': translate('control.panel.tab.dashboard', '主页') },
         h(PageHead, {
           translate,
           titleKey: 'control.panel.title',
-          fallbackTitle: '控制面板',
+          fallbackTitle: '主页',
           subtitleKey: 'control.panel.subtitle',
           fallbackSubtitle: '更改设置并对插件的功能自定义。',
         }),
@@ -3533,7 +5045,7 @@ window.__ModuleLoader__.load({
             titleKey: 'deleteFeature.title',
             fallbackTitle: '删除会话',
             descriptionKey: 'deleteFeature.description',
-            fallbackDescription: '被删除的会话将在下次启动时删除，停用此功能删除不再执行。',
+            fallbackDescription: '被删除的会话将在下次启动时删除，其子代理会话一并删除；停用此功能删除不再执行。',
             translate,
             icon: h(DeleteIcon, null),
             iconDanger: true,
@@ -3577,6 +5089,15 @@ window.__ModuleLoader__.load({
             fallbackDescription: '编辑所选机器上的AGENTS.md。代码仓库的说明也可能适用。',
             icon: h(AgentIcon, null),
             footer: h(AgentPendingFooter, { translate }),
+          }),
+          h(SummaryCard, {
+            translate,
+            titleKey: 'mcpFeature.title',
+            fallbackTitle: 'MCP',
+            descriptionKey: 'mcpFeature.description',
+            fallbackDescription: '按 ChatGPT/Codex 标准管理 MCP 服务器连接。',
+            icon: h(McpIcon, null),
+            footer: h(McpPendingFooter, { translate }),
           }),
         ),
       );
@@ -3667,7 +5188,7 @@ window.__ModuleLoader__.load({
           'div',
           { className: 'MikufanMemoryPanel' },
           !memoryEnabled
-            ? h('div', { className: 'MikufanMemoryNotice', role: 'status' }, translate('memory.offNotice', '长期记忆功能当前已关闭，可在「控制面板」页开启。'))
+            ? h('div', { className: 'MikufanMemoryNotice', role: 'status' }, translate('memory.offNotice', '长期记忆功能当前已关闭，可在「MAGICAL MIRAI」页开启。'))
             : null,
           readFailed
             ? h('div', { className: 'MikufanMemoryNotice', role: 'alert' }, translate('memory.readFailed', '记忆列表读取失败，请刷新页面重试。'))
@@ -3899,23 +5420,6 @@ window.__ModuleLoader__.load({
       );
     }
 
-    /** One not-yet-built feature page: heading + placeholder card. */
-    function PlaceholderPage(props) {
-      const { translate, tabId, tabFallback, titleKey, fallbackTitle, subtitleKey, fallbackSubtitle, phTitleKey, fallbackPhTitle, phTextKey, fallbackPhText } = props;
-      return h(
-        'div',
-        { role: 'tabpanel', 'aria-label': translate(tabId, tabFallback) },
-        h(PageHead, { translate, titleKey, fallbackTitle, subtitleKey, fallbackSubtitle }),
-        h(
-          'div',
-          { className: 'MikufanCpPlaceholder' },
-          h('div', { className: 'MikufanCpPlaceholderGlyph' }, '···'),
-          h('h2', { className: 'MikufanCpPlaceholderTitle' }, translate(phTitleKey, fallbackPhTitle)),
-          h('p', { className: 'MikufanCpPlaceholderText' }, translate(phTextKey, fallbackPhText)),
-        ),
-      );
-    }
-
     /**
      * The control panel body, registered under `main` key
      * {@link CONTROL_PANEL_ID} and opened by the matching sidebar entry. A
@@ -3937,7 +5441,7 @@ window.__ModuleLoader__.load({
           { className: 'MikufanCpNavWrap' },
           h(
             'div',
-            { className: 'MikufanCpTopbar', role: 'tablist', 'aria-label': translate('control.panel.label', '控制面板') },
+            { className: 'MikufanCpTopbar', role: 'tablist', 'aria-label': translate('control.panel.label', 'MAGICAL MIRAI') },
             CONTROL_TABS.map((entry) =>
               h(
                 'button',
@@ -3967,24 +5471,16 @@ window.__ModuleLoader__.load({
                   ? h(SkillsPageBody, { translate, startSkillSession })
                   : tab === 'agent'
                     ? h(AgentPageBody, { translate })
-                    : h(PlaceholderPage, {
-                      translate,
-                      tabId: 'control.panel.tab.mcp',
-                      tabFallback: 'MCP',
-                      titleKey: 'mcp.tab.title',
-                      fallbackTitle: 'MCP',
-                      subtitleKey: 'mcp.tab.subtitle',
-                      fallbackSubtitle: '配置 Model Context Protocol 服务器连接。',
-                      phTitleKey: 'mcp.placeholder.title',
-                      fallbackPhTitle: '暂无服务器',
-                      phTextKey: 'mcp.placeholder.text',
-                      fallbackPhText: '添加 MCP 服务器后，可在此查看连接状态与可用工具。',
-                    }),
+                    : h(McpPageBody, { translate }),
         ),
       );
     }
 
-    /** A 16px sliders glyph for the sidebar rail entry. */
+    /**
+     * 16px glyph for the sidebar rail entry: an octagonal "01" monogram drawn
+     * from the user's reference image (octagon-bold digits), rendered hollow —
+     * outline only, single-color via `currentColor`, no fill.
+     */
     function ControlPanelIcon(props) {
       const size = props?.size ?? 16;
       return h(
@@ -3998,17 +5494,14 @@ window.__ModuleLoader__.load({
             viewBox: '0 0 16 16',
             fill: 'none',
             stroke: 'currentColor',
-            strokeWidth: 1.3,
-            strokeLinecap: 'round',
-            strokeLinejoin: 'round',
+            strokeWidth: 1.2,
+            strokeLinejoin: 'miter',
+            strokeLinecap: 'butt',
             'aria-hidden': true,
           },
-          h('path', { d: 'M2.5 5h5.5' }),
-          h('path', { d: 'M11.9 5h1.6' }),
-          h('circle', { cx: 9.7, cy: 5, r: 1.7 }),
-          h('path', { d: 'M2.5 11h1.6' }),
-          h('path', { d: 'M7.9 11h5.6' }),
-          h('circle', { cx: 6.1, cy: 11, r: 1.7 }),
+          h('path', {
+            d: 'M3 3H7L9 5V11L7 13H3L1 11V5ZM4.2 5.2H5.8L6.8 6.2V9.8L5.8 10.8H4.2L3.2 9.8V6.2ZM12.1 3H15V13H12.2V6.2L10.4 7.4V4.9Z',
+          }),
         ),
       );
     }
@@ -4305,7 +5798,7 @@ window.__ModuleLoader__.load({
               name: PANEL_LIST_SLOT,
               id: CONTROL_PANEL_ID,
               order: PANEL_ORDER,
-              label: () => translate('control.panel.label', '控制面板'),
+              label: () => translate('control.panel.label', 'MAGICAL MIRAI'),
             },
             ControlPanelIcon,
           ),
