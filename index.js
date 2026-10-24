@@ -1003,13 +1003,21 @@ function createRouteHandler({ ctx, store, preferences, memory, lan, skillsRoot, 
             return;
           }
           if (!isEnabled && req.method === 'DELETE') {
-            const removed = await mcp.remove(name);
-            if (!removed) {
+            const result = await mcp.remove(name);
+            if (!result.removed) {
               envelope(res, 404, undefined, { code: 'not-found', message: `no MCP server named ${name}` });
               return;
             }
             log(`MCP server deleted via panel: ${name}`);
-            envelope(res, 200, { removed: true, id: name });
+            // The disable-sync outcome rides along (`reloaded` / `absent` /
+            // `failed` / `restart-required`) so the panel can warn about a
+            // composition row it could not turn off.
+            envelope(res, 200, {
+              removed: true,
+              id: name,
+              ...(result.applied === undefined ? {} : { applied: result.applied }),
+              ...(result.applyError === undefined ? {} : { applyError: result.applyError }),
+            });
             return;
           }
         }

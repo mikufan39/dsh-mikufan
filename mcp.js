@@ -336,17 +336,30 @@ export class McpStore {
     });
   }
 
-  /** Remove one server; a removed server's composition entry is disabled. */
+  /**
+   * Remove one server; a removed server's composition entry is disabled.
+   *
+   * @returns `{ removed, applied?, applyError? }` — `removed: false` when the
+   * document had no such server. The enable-sync outcome travels with the
+   * result because the row it disables outlives the record: the panel has to
+   * be able to say that the leftover `mcp-<name>` entry could not be turned
+   * off, exactly like `create` / `update` / `setEnabled` report theirs.
+   */
   async remove(name) {
     return this.enqueue(async () => {
       const existing = await readMcpServers(this.file);
       const index = existing.servers.findIndex((entry) => entry.name === name);
-      if (index === -1) return false;
+      if (index === -1) return { removed: false };
       const removed = existing.servers[index];
       const servers = existing.servers.filter((entry) => entry.name !== name);
       await writeMcpServers(this.file, servers);
-      if (removed.enabled) await this.syncEnabled({ ...removed, enabled: false });
-      return true;
+      if (!removed.enabled) return { removed: true };
+      const synced = await this.syncEnabled({ ...removed, enabled: false });
+      return {
+        removed: true,
+        ...(synced.applied === undefined ? {} : { applied: synced.applied }),
+        ...(synced.applyError === undefined ? {} : { applyError: synced.applyError }),
+      };
     });
   }
 }

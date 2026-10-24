@@ -40,7 +40,9 @@
  * The dashboard page also carries a summary card per manager page (Skills,
  * Agent, MCP — no switch): its footer hydrates the same store the page uses,
  * so the status is visible without visiting the page.
- * - The last opened page is remembered in `localStorage`.
+ * - The panel always opens on the dashboard: the host unmounts it whenever
+ *   another `main` view takes over (opening a session does), so the page is
+ *   per-open state and never remembered across opens.
  *
  * The marked set, the preferences and the memories are the Host's (see
  * `index.js` and `memory.js`): this half hydrates from the HTTP routes and
@@ -87,8 +89,6 @@ window.__ModuleLoader__.load({
     const PANEL_ORDER = 60;
     /** A session id safe to embed in a CSS attribute selector. */
     const SAFE_ID = /^[A-Za-z0-9._-]+$/;
-    /** localStorage key remembering the last opened control-panel page. */
-    const TAB_STORAGE_KEY = 'dsh-mikufan:control-panel-tab';
     /** The bundled skill that guides a user through creating a skill. */
     const SKILL_CREATOR_NAME = 'skill-creator';
     /**
@@ -235,6 +235,8 @@ window.__ModuleLoader__.load({
         'mcp.readFailed': 'MCP 服务器列表读取失败，请刷新页面重试。',
         'mcp.transport.stdio': 'stdio（本地进程）',
         'mcp.transport.streamable_http': 'streamable_http（远程服务）',
+        'mcp.transport.stdio.short': 'stdio',
+        'mcp.transport.streamable_http.short': 'streamable_http',
         'mcp.enabled.on': '已启用（同步开关到运行中的 Harness）',
         'mcp.enabled.off': '已停用（保留条目，不写入配置）',
         'mcp.enabled.enable': '启用',
@@ -284,6 +286,10 @@ window.__ModuleLoader__.load({
         'mcp.detail.copy': '复制',
         'mcp.detail.copied': '已复制',
         'mcp.close': '关闭',
+        'mcp.notice.dismiss': '关闭提示',
+        'mcp.deleteFailed': '删除失败：{message}',
+        'mcp.delete.appliedFailed': '已删除，但没能停用组合里的 mcp-{name} 条目（它可能仍在运行）：{message}',
+        'mcp.delete.appliedRestart': '已删除；组合里的 mcp-{name} 条目需要重启 Harness 才会停止。',
         'memory.tab.title': '记忆',
         'memory.tab.subtitle': 'Agent 跨会话记住的持久事实，纯本地存储。',
         'memory.offNotice': '长期记忆功能当前已关闭，可在「MAGICAL MIRAI」页开启。',
@@ -463,6 +469,8 @@ window.__ModuleLoader__.load({
         'mcp.readFailed': 'Reading the MCP server list failed; reload the page and retry.',
         'mcp.transport.stdio': 'stdio (local process)',
         'mcp.transport.streamable_http': 'streamable_http (remote service)',
+        'mcp.transport.stdio.short': 'stdio',
+        'mcp.transport.streamable_http.short': 'streamable_http',
         'mcp.enabled.on': 'Enabled (synced into the running Harness)',
         'mcp.enabled.off': 'Disabled (kept here, not written into the config)',
         'mcp.enabled.enable': 'Enable',
@@ -512,6 +520,10 @@ window.__ModuleLoader__.load({
         'mcp.detail.copy': 'Copy',
         'mcp.detail.copied': 'Copied',
         'mcp.close': 'Close',
+        'mcp.notice.dismiss': 'Dismiss notice',
+        'mcp.deleteFailed': 'Delete failed: {message}',
+        'mcp.delete.appliedFailed': 'Deleted, but the mcp-{name} composition entry could not be turned off (it may still be running): {message}',
+        'mcp.delete.appliedRestart': 'Deleted; the mcp-{name} composition entry needs a Harness restart to stop.',
         'memory.tab.title': 'Memory',
         'memory.tab.subtitle': 'Durable facts the agent remembers across sessions, stored locally.',
         'memory.offNotice': 'Long-term memory is currently off. Enable it on the MAGICAL MIRAI page.',
@@ -768,7 +780,12 @@ window.__ModuleLoader__.load({
         payload = null;
       }
       if (!response.ok || payload?.ok !== true) {
-        throw new Error(payload?.error?.message ?? `HTTP ${response.status}`);
+        // Keep the envelope's code and the HTTP status on the error: a few
+        // flows treat one code specially (a 404 delete means "already gone").
+        const error = new Error(payload?.error?.message ?? `HTTP ${response.status}`);
+        error.status = response.status;
+        error.code = payload?.error?.code;
+        throw error;
       }
       return payload.value;
     }
@@ -1389,6 +1406,9 @@ window.__ModuleLoader__.load({
     /** Whether the read retries are exhausted (the page then shows a hint). */
     let mcpReadGaveUp = false;
 
+    /** The one-line page notice (a delete outcome), or '' when there is none. */
+    let mcpNotice = '';
+
     function subscribeMcp(listener) {
       mcpListeners.add(listener);
       return () => {
@@ -1398,6 +1418,17 @@ window.__ModuleLoader__.load({
 
     function getMcpServers() {
       return mcpServers;
+    }
+
+    function getMcpNotice() {
+      return mcpNotice;
+    }
+
+    /** Publish `text` as the page notice; '' clears it. */
+    function setMcpNotice(text) {
+      if (mcpNotice === text) return;
+      mcpNotice = text;
+      emitMcp();
     }
 
     function isMcpLoaded() {
@@ -1549,21 +1580,52 @@ window.__ModuleLoader__.load({
       return '';
     }
 
-    /** Remove one server with optimistic apply + rollback. */
-    async function deleteMcpViaHost(name) {
+    /**
+     * Remove one server with optimistic apply + rollback.
+     *
+     * Deleting is the one mutation whose own card disappears, so its failure —
+     * and the fate of the composition row the Host disables on the way out —
+     * cannot be reported on the card: both land on the page notice instead.
+     * A `not-found` means the document no longer holds the server (another tab,
+     * a hand edit): the optimistic drop stands and the list re-reads.
+     */
+    async function deleteMcpViaHost(name, translate) {
       const index = mcpServers.findIndex((server) => server.name === name);
       const previous = index === -1 ? undefined : mcpServers[index];
+      setMcpNotice('');
       dropMcpServer(name);
       try {
-        await callHost(`mcp/${encodeURIComponent(name)}`, { method: 'DELETE' });
+        const value = await callHost(`mcp/${encodeURIComponent(name)}`, { method: 'DELETE' });
+        if (value?.applied === 'failed') {
+          setMcpNotice(
+            formatTemplate(
+              translate('mcp.delete.appliedFailed', '已删除，但没能停用组合里的 mcp-{name} 条目（它可能仍在运行）：{message}'),
+              { name, message: value.applyError ?? '' },
+            ),
+          );
+        } else if (value?.applied === 'restart-required') {
+          setMcpNotice(
+            formatTemplate(translate('mcp.delete.appliedRestart', '已删除；组合里的 mcp-{name} 条目需要重启 Harness 才会停止。'), { name }),
+          );
+        }
+        return value;
       } catch (error) {
+        if (error?.code === 'not-found' || error?.status === 404) {
+          void hydrateMcp();
+          return null;
+        }
         if (previous !== undefined) {
           const next = [...mcpServers];
           next.splice(Math.min(index, next.length), 0, previous);
           mcpServers = next;
           emitMcp();
         }
-        throw error;
+        setMcpNotice(
+          formatTemplate(translate('mcp.deleteFailed', '删除失败：{message}'), {
+            message: String(error?.message ?? error),
+          }),
+        );
+        return null;
       }
     }
 
@@ -2787,11 +2849,14 @@ window.__ModuleLoader__.load({
 
     // ---------------------------------------------------------------------
     // MCP page: the Codex-standard mcp_servers list as a card grid. One card
-    // per server — first line the name, second line the transport + endpoint
-    // (`stdio` 命令 or streamable_http url), the header switch is the entry's
-    // `enabled` flag, the footer 编辑 / 详情 / 删除. Creating and editing
-    // happen in the McpDialog popup; 详情 opens the McpDetailOverlay, whose
-    // body shows the Codex TOML and the dsh-mcp-client YAML transcription.
+    // per server — the header line is the name followed by its transport chip
+    // and then the `enabled` switch, the line under it is the endpoint
+    // (`stdio` command or streamable_http url), the footer 编辑 / 详情 / 删除.
+    // A long name truncates with an ellipsis and, while the pointer rests on
+    // the card, marquees to its tail and back (see `scrollMcpCardName`).
+    // Creating and editing happen in the McpDialog popup; 详情 opens the
+    // McpDetailOverlay, whose body shows the Codex TOML and the
+    // dsh-mcp-client YAML transcription.
     // ---------------------------------------------------------------------
 
     installStyle(
@@ -2807,9 +2872,14 @@ window.__ModuleLoader__.load({
 .MikufanMcpEmpty{margin:0;text-align:center;font-size:12px;line-height:18px;color:var(--dsw-alias-label-tertiary)}
 .MikufanMcpCard{display:flex;flex-direction:column;gap:10px;min-width:0;padding:16px 18px 12px;border:1px solid var(--dsw-alias-border-l1);border-radius:var(--dsw-radius-lg);background:var(--dsw-alias-bg-layer-1);box-shadow:0 1px 3px rgba(0,0,0,.04);transition:transform .15s ease,box-shadow .15s ease}
 .MikufanMcpCard:hover{transform:translateY(-1px);box-shadow:0 4px 14px rgba(0,0,0,.07)}
-.MikufanMcpCardHead{display:flex;align-items:flex-start;gap:8px;min-width:0}
-.MikufanMcpCardHead .MikufanSwitch{margin-left:auto;margin-top:1px}
-.MikufanMcpName{margin:0;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:15px;font-weight:600;line-height:22px;letter-spacing:-.01em;color:var(--dsw-alias-label-primary)}
+.MikufanMcpCardHead{display:flex;align-items:center;gap:8px;min-width:0}
+.MikufanMcpCardHead .MikufanSwitch{margin-left:auto;margin-top:0}
+/* The name is the only flexible item: a short name keeps the chip right behind
+   it, a long one shrinks to an ellipsis and the chip lands at the row's end. */
+.MikufanMcpName{flex:0 1 auto;margin:0;min-width:0;max-width:100%;overflow:hidden;white-space:nowrap;font-size:15px;font-weight:600;line-height:22px;letter-spacing:-.01em;color:var(--dsw-alias-label-primary)}
+.MikufanMcpNameText{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.MikufanMcpNameText[data-scrolling=true]{overflow:visible;text-overflow:clip}
+.MikufanMcpBody{display:flex;flex-direction:column;gap:6px;min-width:0}
 .MikufanMcpDesc{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;margin:0;font-size:12px;line-height:18px;color:var(--dsw-alias-label-secondary);word-break:break-all}
 .MikufanMcpCard[data-disabled=true] .MikufanMcpName{color:var(--dsw-alias-label-tertiary)}
 .MikufanMcpCard[data-disabled=true] .MikufanMcpDesc{color:var(--dsw-alias-label-tertiary)}
@@ -2823,6 +2893,11 @@ window.__ModuleLoader__.load({
 .MikufanMcpActionDanger:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover-danger);color:var(--dsw-alias-state-error-primary)}
 .MikufanMcpActionArmed{background:var(--dsw-alias-interactive-bg-hover-danger);color:var(--dsw-alias-state-error-primary)}
 .MikufanMcpErrorLine{margin:-4px 0 0;font-size:12px;line-height:18px;color:var(--dsw-alias-state-error-primary)}
+.MikufanMcpNotice{display:flex;align-items:center;gap:8px;padding:7px 10px;border:1px solid var(--dsw-alias-border-l2);border-radius:var(--dsw-radius-sm);background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-secondary);font-size:12px;line-height:18px}
+.MikufanMcpNoticeClose{flex:none;display:inline-flex;align-items:center;justify-content:center;margin-left:auto;width:20px;height:20px;padding:0;border:0;border-radius:var(--dsw-radius-sm);background:transparent;color:var(--dsw-alias-label-tertiary);cursor:pointer}
+.MikufanMcpNoticeClose:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}
+.MikufanMcpNoticeClose:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:1px}
+.MikufanMcpNoticeClose svg{width:12px;height:12px}
 .MikufanMcpAppliedLine{margin:-4px 0 0;font-size:12px;line-height:18px;color:var(--dsw-alias-state-success-primary,var(--dsw-alias-label-secondary))}
 /* Dialog: the memory dialog's overlay idiom, two columns wide for the fields. */
 .MikufanMcpMask{position:fixed;inset:0;z-index:1010;display:flex;align-items:center;justify-content:center;padding:24px;background:var(--dsw-alias-bg-mask-1);backdrop-filter:var(--dsw-mask-blur,blur(4px));-webkit-backdrop-filter:var(--dsw-mask-blur,blur(4px));animation:MikufanMemFade .16s ease-out}
@@ -2880,15 +2955,93 @@ window.__ModuleLoader__.load({
         : translate('mcp.transport.streamable_http', 'streamable_http（远程服务）');
     }
 
+    /**
+     * The card header's transport chip: only the transport name. The card row
+     * shares its width with the name and the switch, so the qualifiers the
+     * dialog and the detail overlay spell out (`（本地进程）` / `（远程服务）`)
+     * would crowd a long name — those two places keep the long form.
+     */
+    function mcpTransportChipLabel(translate, server) {
+      return server.transport === 'stdio'
+        ? translate('mcp.transport.stdio.short', 'stdio')
+        : translate('mcp.transport.streamable_http.short', 'streamable_http');
+    }
+
     /** The one-line endpoint shown under a card's name. */
     function mcpEndpointText(server) {
       return server.transport === 'stdio' ? server.command : server.url;
     }
 
+    /** Pixels per second the name marquee travels at. */
+    const MCP_NAME_SPEED = 40;
+    /** How long the marquee rests at each end, in milliseconds. */
+    const MCP_NAME_PAUSE = 700;
+    /** Rounding slack: a name this close to fitting is treated as fitting. */
+    const MCP_NAME_SLACK = 8;
+
+    /**
+     * Start or stop the hover marquee of one card's name. A name that fits its
+     * row keeps the plain ellipsis (nothing to scroll); a longer one runs to
+     * its tail, rests, and comes back to the start, repeating while the
+     * pointer stays on the card. Leaving the card — or any environment without
+     * Web Animations, with `prefers-reduced-motion: reduce` — restores the
+     * truncated look. The animation object is parked on the name element so a
+     * second hover cancels the first instead of stacking two of them.
+     */
+    function scrollMcpCardName(event, active) {
+      const card = event?.currentTarget;
+      const name = card !== null && typeof card?.querySelector === 'function' ? card.querySelector('.MikufanMcpName') : null;
+      const text = name?.firstElementChild ?? null;
+      const running = name?.__mikufanNameMarquee;
+      if (running) {
+        running.cancel();
+        name.__mikufanNameMarquee = undefined;
+      }
+      if (text === null) return;
+      if (text.style !== undefined) {
+        text.style.transform = '';
+        text.style.overflow = '';
+        text.style.textOverflow = '';
+      }
+      if (text.dataset !== undefined) text.dataset.scrolling = 'false';
+      if (!active) return;
+      const distance = Math.round((text.scrollWidth ?? 0) - (name.clientWidth ?? 0));
+      if (distance <= MCP_NAME_SLACK || typeof text.animate !== 'function') return;
+      if (typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)')?.matches) {
+        return;
+      }
+      if (text.style !== undefined) {
+        text.style.overflow = 'visible';
+        text.style.textOverflow = 'clip';
+      }
+      if (text.dataset !== undefined) text.dataset.scrolling = 'true';
+      const travel = Math.max(900, Math.round((distance / MCP_NAME_SPEED) * 1000));
+      const total = travel * 2 + MCP_NAME_PAUSE * 2;
+      const atTail = (travel + MCP_NAME_PAUSE) / total;
+      const backHome = (travel * 2 + MCP_NAME_PAUSE) / total;
+      const parked = `translateX(-${distance}px)`;
+      name.__mikufanNameMarquee = text.animate(
+        [
+          { offset: 0, transform: 'translateX(0)' },
+          { offset: travel / total, transform: parked },
+          { offset: atTail, transform: parked },
+          { offset: backHome, transform: 'translateX(0)' },
+          { offset: 1, transform: 'translateX(0)' },
+        ],
+        { duration: total, iterations: Infinity, easing: 'linear' },
+      );
+    }
+
+    /** The hover pair handed to the card root (the pointer anywhere on it counts). */
+    const mcpNameHover = {
+      onMouseEnter: (event) => scrollMcpCardName(event, true),
+      onMouseLeave: (event) => scrollMcpCardName(event, false),
+    };
+
     /**
      * One MCP server as a rounded card in the memory/skills idiom: the header
-     * row is the name plus the `enabled` switch, the body shows the transport
-     * chip and the endpoint, and the footer is 编辑 / 详情 / 删除 (two-step).
+     * row is the name, its transport chip and the `enabled` switch, the body
+     * is the endpoint, and the footer is 编辑 / 详情 / 删除 (two-step).
      */
     function McpCard(props) {
       const { server, translate, onEdit, onDetails } = props;
@@ -2931,16 +3084,22 @@ window.__ModuleLoader__.load({
           return;
         }
         setArmed(false);
-        run(() => deleteMcpViaHost(server.name));
+        run(() => deleteMcpViaHost(server.name, translate));
       };
 
       return h(
         'div',
-        { className: 'MikufanMcpCard', 'data-disabled': server.enabled ? 'false' : 'true' },
+        {
+          className: 'MikufanMcpCard',
+          'data-disabled': server.enabled ? 'false' : 'true',
+          onMouseEnter: mcpNameHover.onMouseEnter,
+          onMouseLeave: mcpNameHover.onMouseLeave,
+        },
         h(
           'div',
           { className: 'MikufanMcpCardHead' },
-          h('h3', { className: 'MikufanMcpName' }, server.name),
+          h('h3', { className: 'MikufanMcpName' }, h('span', { className: 'MikufanMcpNameText' }, server.name)),
+          h('span', { className: 'MikufanMemTag' }, mcpTransportChipLabel(translate, server)),
           h(
             'button',
             {
@@ -2959,7 +3118,6 @@ window.__ModuleLoader__.load({
         h(
           'div',
           { className: 'MikufanMcpBody' },
-          h('span', { className: 'MikufanMemTag' }, mcpTransportLabel(translate, server)),
           h('div', { className: 'MikufanMcpDesc' }, mcpEndpointText(server)),
         ),
         h(
@@ -3705,6 +3863,7 @@ window.__ModuleLoader__.load({
       const servers = useSyncExternalStore(subscribeMcp, getMcpServers);
       const loaded = useSyncExternalStore(subscribeMcp, isMcpLoaded);
       const readFailed = useSyncExternalStore(subscribeMcp, isMcpReadFailed);
+      const notice = useSyncExternalStore(subscribeMcp, getMcpNotice);
       /** `null` while closed, else `{ mode: 'create' }` or `{ mode: 'edit', name }`. */
       const [dialog, setDialog] = useState(null);
       /** The open detail overlay's server name, or null. */
@@ -3769,6 +3928,24 @@ window.__ModuleLoader__.load({
           { className: 'MikufanMcpPanel' },
           readFailed
             ? h('div', { className: 'MikufanMemoryNotice', role: 'alert' }, translate('mcp.readFailed', 'MCP 服务器列表读取失败，请刷新页面重试。'))
+            : null,
+          notice !== ''
+            ? h(
+                'div',
+                { className: 'MikufanMcpNotice', role: 'alert' },
+                notice,
+                h(
+                  'button',
+                  {
+                    type: 'button',
+                    className: 'MikufanMcpNoticeClose',
+                    'aria-label': translate('mcp.notice.dismiss', '关闭提示'),
+                    title: translate('mcp.notice.dismiss', '关闭提示'),
+                    onClick: () => setMcpNotice(''),
+                  },
+                  h(CrossIcon, null),
+                ),
+              )
             : null,
           loaded && servers.length > 0
             ? h(
@@ -3857,7 +4034,7 @@ window.__ModuleLoader__.load({
                 onClose: () => setDetailName(null),
                 onDelete: (server) => {
                   setDetailName(null);
-                  void deleteMcpViaHost(server.name).catch(() => {});
+                  void deleteMcpViaHost(server.name, translate);
                 },
               })
             : null,
@@ -4580,23 +4757,8 @@ window.__ModuleLoader__.load({
       { id: 'mcp', key: 'control.panel.tab.mcp', fallback: 'MCP' },
     ];
 
-    /** The last opened page, or the dashboard. */
-    function readStoredTab() {
-      try {
-        const saved = localStorage.getItem(TAB_STORAGE_KEY);
-        return CONTROL_TABS.some((tab) => tab.id === saved) ? saved : 'dashboard';
-      } catch {
-        return 'dashboard';
-      }
-    }
-
-    function storeTab(id) {
-      try {
-        localStorage.setItem(TAB_STORAGE_KEY, id);
-      } catch {
-        /* private mode: the choice just does not persist */
-      }
-    }
+    /** The page the panel always opens on (see {@link ControlPanelPage}). */
+    const DEFAULT_TAB = 'dashboard';
 
     /** One page heading: title + subtitle. */
     function PageHead({ translate, titleKey, fallbackTitle, subtitleKey, fallbackSubtitle }) {
@@ -5443,16 +5605,16 @@ window.__ModuleLoader__.load({
     /**
      * The control panel body, registered under `main` key
      * {@link CONTROL_PANEL_ID} and opened by the matching sidebar entry. A
-     * floating pill tab bar switches pages; the last choice persists in
-     * localStorage.
+     * floating pill tab bar switches pages. The page is *not* remembered: the
+     * host mounts this component only while the panel is the active `main`
+     * view (opening a session unmounts it), so a remembered page would decide
+     * where the next open lands — the panel always starts on the dashboard and
+     * the user picks a page from the tab bar every time.
      */
     function ControlPanelPage(props) {
       const { translate, startSkillSession } = props;
-      const [tab, setTab] = useState(readStoredTab);
-      const select = (id) => {
-        setTab(id);
-        storeTab(id);
-      };
+      const [tab, setTab] = useState(DEFAULT_TAB);
+      const select = setTab;
       return h(
         'div',
         { className: 'MikufanCpRoot' },
