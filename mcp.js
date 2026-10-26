@@ -67,6 +67,23 @@ function mcpError(code, message) {
 }
 
 /**
+ * Keep a record's `updatedAt` stamp when the incoming value carries one. The
+ * panel orders its cards newest-first on this field, so every read → mutate →
+ * write round trip has to preserve the stamps of the servers it did not touch
+ * (`normalizeMcpServer` rebuilds each record from scratch otherwise).
+ *
+ * @param server - the rebuilt record.
+ * @param raw - the incoming `updatedAt`, if any.
+ * @returns the record, with the stamp when it was usable.
+ */
+function keepUpdatedAt(server, raw) {
+  if (typeof raw !== 'string') return server;
+  const at = Date.parse(raw);
+  if (!Number.isFinite(at)) return server;
+  return { ...server, updatedAt: new Date(at).toISOString() };
+}
+
+/**
  * Validate one server object against the Codex `mcp_servers.<name>` contract.
  *
  * Accepts any object shape (the panel keeps the raw form state), returns the
@@ -143,7 +160,7 @@ export function normalizeMcpServer(name, value) {
     const tool = timeout('tool_timeout_sec', value.tool_timeout_sec);
     if (tool !== undefined) server.tool_timeout_sec = tool;
     server.enabled = value.enabled === false ? false : true;
-    return server;
+    return keepUpdatedAt(server, value.updatedAt);
   }
   if (typeof value.url !== 'string' || !/^https?:\/\//i.test(value.url.trim())) {
     throw mcpError('bad-url', `server ${name}: streamable_http requires an http(s) url`);
@@ -166,7 +183,7 @@ export function normalizeMcpServer(name, value) {
   const tool = timeout('tool_timeout_sec', value.tool_timeout_sec);
   if (tool !== undefined) server.tool_timeout_sec = tool;
   server.enabled = value.enabled === false ? false : true;
-  return server;
+  return keepUpdatedAt(server, value.updatedAt);
 }
 
 /**
@@ -234,7 +251,8 @@ export async function writeMcpServers(file, servers) {
 /**
  * Create the engine over one document path. Every mutation re-reads the file,
  * so an out-of-band edit is adopted instead of clobbered; the write queue
- * keeps concurrent panel requests ordered.
+ * keeps concurrent panel requests ordered. Each mutation also stamps the
+ * touched record's `updatedAt`: the panel orders its cards newest-first on it.
  *
  * `applyEnabled` (optional) runs after a successful document write that changed
  * a server's `enabled` flag (setEnabled / update / remove / create). The Host
@@ -287,7 +305,7 @@ export class McpStore {
   async create(value) {
     return this.enqueue(async () => {
       const existing = await readMcpServers(this.file);
-      const server = normalizeMcpServer(value?.name, value);
+      const server = { ...normalizeMcpServer(value?.name, value), updatedAt: new Date().toISOString() };
       if (existing.servers.some((entry) => entry.name === server.name)) {
         throw mcpError('exists', `an MCP server named ${server.name} already exists`);
       }
@@ -306,7 +324,7 @@ export class McpStore {
       const existing = await readMcpServers(this.file);
       const index = existing.servers.findIndex((entry) => entry.name === name);
       if (index === -1) throw mcpError('not-found', `no MCP server named ${name}`);
-      const server = normalizeMcpServer(value?.name, value);
+      const server = { ...normalizeMcpServer(value?.name, value), updatedAt: new Date().toISOString() };
       if (server.name !== name && existing.servers.some((entry) => entry.name === server.name)) {
         throw mcpError('exists', `an MCP server named ${server.name} already exists`);
       }
@@ -330,7 +348,7 @@ export class McpStore {
       if (index === -1) throw mcpError('not-found', `no MCP server named ${name}`);
       const next = enabled === true;
       const servers = [...existing.servers];
-      servers[index] = { ...servers[index], enabled: next };
+      servers[index] = { ...servers[index], enabled: next, updatedAt: new Date().toISOString() };
       await writeMcpServers(this.file, servers);
       return this.syncEnabled(servers[index]);
     });

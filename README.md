@@ -15,6 +15,7 @@ DeepSeek Harness 的插件包（bundle）：魔法未来为dsh增加/强化了�
 | **Skills** | 管理 `~/.dsh/skills`，自带 `skill-creator`；面板可开关、新建、查看、卸载。 |
 | **Agent** | 编辑用户全局 `~/.dsh/AGENTS.md`。 |
 | **MCP** | 按 ChatGPT / Codex 的 `mcp_servers` 标准管理服务器。 |
+| **一键重启** | 打开开关后 6 秒重启 DSH，倒计时内关掉即取消；有会话在跑时不可用。 |
 
 ## MAGICAL MIRAI面板
 

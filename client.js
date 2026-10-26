@@ -112,6 +112,19 @@ window.__ModuleLoader__.load({
         'splash.description': '一切皆插件。',
         'splash.pending.off': '已停用，页面加载将不再播放动画',
         'splash.pending.on': '每次加载页面时播放',
+        'restartFeature.title': '一键重启',
+        'restartFeature.description': '打开开关后六秒将重启一次，倒计时结束前关闭开关取消重启。',
+        'restart.pending.none': '无重启计划',
+        'restart.pending.countdown': '{n} 秒后执行重启',
+        'restart.pending.busy': '有会话尚在运行',
+        'restart.pending.restarting': '正在重启…',
+        'restart.pending.cancelledBusy': '有会话尚在运行，重启已取消',
+        'restart.failed.relaunch': '重启进程启动失败，请手动重启 DSH',
+        'restart.failed.read': '无法读取重启状态',
+        'restart.failed.plan': '无法保存重启计划，请重试。',
+        'restart.failed.timeout': '重启尚未完成，请稍后手动刷新页面',
+        'restart.failed.auth': '需要重新认证：请打开 dsh web 打印的链接',
+        'restart.busy.hint': '有会话在运行，暂不能重启',
         'memoryFeature.title': '记忆',
         'memoryFeature.description': 'Agent 的本地长期记忆，每个会话自动携带记忆索引。',
         'memoryFeature.pending.none': '已保存 {count} 条记忆',
@@ -137,6 +150,7 @@ window.__ModuleLoader__.load({
         'control.panel.title': '主页',
         'control.panel.subtitle': '更改设置并对插件的功能自定义。',
         'control.panel.tab.dashboard': '主页',
+        'dashboard.openPage': '打开「{title}」页',
         'control.panel.tab.memory': '记忆',
         'control.panel.tab.lan': '局域网访问',
         'control.panel.tab.skills': 'Skills',
@@ -346,6 +360,19 @@ window.__ModuleLoader__.load({
         'splash.description': 'Everything is a plugin.',
         'splash.pending.off': 'Disabled — page loads play no animation',
         'splash.pending.on': 'Plays on every page load',
+        'restartFeature.title': 'One-click restart',
+        'restartFeature.description': 'Turning it on restarts DSH in six seconds; turn it off before the countdown ends to cancel.',
+        'restart.pending.none': 'No restart scheduled',
+        'restart.pending.countdown': 'Restarting in {n}s',
+        'restart.pending.busy': 'A session is still running',
+        'restart.pending.restarting': 'Restarting…',
+        'restart.pending.cancelledBusy': 'A session was running, so the restart was cancelled',
+        'restart.failed.relaunch': 'Could not start the restart helper — restart DSH manually',
+        'restart.failed.read': 'Could not read the restart status',
+        'restart.failed.plan': 'Could not save the restart plan — try again.',
+        'restart.failed.timeout': 'The restart has not finished — reload the page manually in a moment.',
+        'restart.failed.auth': 'Re-authentication needed — open the URL printed by dsh web.',
+        'restart.busy.hint': 'A session is running, so restarting is unavailable',
         'memoryFeature.title': 'Memory',
         'memoryFeature.description': 'The agent\'s local long-term memory; every session carries a memory index.',
         'memoryFeature.pending.none': '{count} memories saved',
@@ -371,6 +398,7 @@ window.__ModuleLoader__.load({
         'control.panel.title': 'Home',
         'control.panel.subtitle': 'Change settings and customize the plugin\'s features.',
         'control.panel.tab.dashboard': 'Home',
+        'dashboard.openPage': 'Open the {title} page',
         'control.panel.tab.memory': 'Memory',
         'control.panel.tab.lan': 'LAN access',
         'control.panel.tab.skills': 'Skills',
@@ -581,6 +609,7 @@ window.__ModuleLoader__.load({
     const STYLE_SKILLS = `${PACKAGE_NAME}/skills-panel.css`;
     const STYLE_MCP = `${PACKAGE_NAME}/mcp-panel.css`;
     const STYLE_AGENT = `${PACKAGE_NAME}/agent-panel.css`;
+    const STYLE_RESTART = `${PACKAGE_NAME}/restart-cover.css`;
 
     /** Install (or find) one package-owned style tag. */
     function installStyle(key, css) {
@@ -790,6 +819,39 @@ window.__ModuleLoader__.load({
       return payload.value;
     }
 
+    // ---------------------------------------------------------------------
+    // Card order: the memory, skills and MCP pages all show the newest-updated
+    // record first. The Host hands every list over in its own storage order
+    // (memory: oldest-first, skills: by name, MCP: document order), so the
+    // order the user sees is decided here, once, from each record's own
+    // `updatedAt` (a memory edit, a skill file's mtime, an MCP record's stamp).
+    // ---------------------------------------------------------------------
+
+    /**
+     * A record's last-touched instant in ms, for the newest-first card order.
+     * @returns the instant, or `-Infinity` when the record carries none.
+     */
+    function updatedAtMs(record) {
+      const raw = record?.updatedAt ?? record?.createdAt;
+      const value = typeof raw === 'string' ? Date.parse(raw) : Number.NaN;
+      return Number.isFinite(value) ? value : Number.NEGATIVE_INFINITY;
+    }
+
+    /**
+     * Newest-updated first, as a copy — the store keeps the Host's own order.
+     * `Array#sort` is stable, so records sharing one instant (or carrying no
+     * timestamp at all, e.g. an `mcp.json` record written before the field
+     * existed) keep the order the Host sent.
+     */
+    function newestFirst(records) {
+      return [...records].sort((left, right) => {
+        const leftAt = updatedAtMs(left);
+        const rightAt = updatedAtMs(right);
+        if (leftAt === rightAt) return 0;
+        return rightAt > leftAt ? 1 : -1;
+      });
+    }
+
     // --- Host reads: first load, then reconciliation while marks are pending ---
     //
     // The Host drops a mark as soon as the user sends a message in that session,
@@ -952,6 +1014,12 @@ window.__ModuleLoader__.load({
 .MikufanCpCardMain{flex:1;min-width:0}
 .MikufanCpCardHead{display:flex;align-items:center;justify-content:space-between;gap:12px}
 .MikufanCpCardHead .MikufanCpCardTitle{margin:0}
+/* A dashboard card with its own page is clickable; the title is its keyboard path. */
+.MikufanCpCard[data-navigable=true]{cursor:pointer}
+.MikufanCpCardTitleButton{appearance:none;font:inherit;letter-spacing:inherit;color:inherit;background:none;border:0;padding:0;margin:0;text-align:left;cursor:pointer;border-radius:var(--dsw-radius-sm)}
+/* Hover feedback is the colour shift only: no underline on the card titles. */
+.MikufanCpCard[data-navigable=true]:hover .MikufanCpCardTitleButton{color:var(--dsw-alias-brand-primary)}
+.MikufanCpCardTitleButton:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:2px}
 .MikufanCpCardFoot{margin-top:12px;padding-top:10px;border-top:1px solid var(--dsw-alias-border-l1);font-size:12px;line-height:18px;color:var(--dsw-alias-label-caption);display:flex;align-items:center;gap:6px}
 .MikufanCpCardFootHot{color:var(--dsw-alias-state-error-primary)}
 .MikufanCpCardFootActive{color:var(--dsw-alias-state-success-primary,var(--dsw-alias-label-secondary))}
@@ -1037,8 +1105,9 @@ window.__ModuleLoader__.load({
       const index = memoryEntries.findIndex((candidate) => candidate.id === entry.id);
       if (index === -1) {
         // The Host stores and returns entries oldest-first (`MemoryStore.create`
-        // pushes), so a new entry goes to the end: the card then keeps its place
-        // across the next hydrate instead of jumping to the top.
+        // pushes), so this array mirrors that storage order. It is not the card
+        // order: `MemoryPageBody` sorts by `updatedAt` for display, which keeps
+        // a hydrate from reshuffling anything.
         memoryEntries = [...memoryEntries, entry];
       } else {
         const next = [...memoryEntries];
@@ -1286,7 +1355,9 @@ window.__ModuleLoader__.load({
       if (entry === null || typeof entry !== 'object' || typeof entry.id !== 'string') return;
       const index = skillEntries.findIndex((candidate) => candidate.id === entry.id);
       if (index === -1) {
-        skillEntries = [...skillEntries, entry].sort((left, right) => (left.name < right.name ? -1 : left.name > right.name ? 1 : 0));
+        // The store keeps the Host's list (name order); the page re-sorts by
+        // `updatedAt`, so appending here is enough to keep the record.
+        skillEntries = [...skillEntries, entry];
       } else {
         const next = [...skillEntries];
         next[index] = entry;
@@ -1628,6 +1699,401 @@ window.__ModuleLoader__.load({
         return null;
       }
     }
+
+    // ---------------------------------------------------------------------
+    // Feature 8, one-click restart.
+    //
+    // The countdown lives on the Host (closing the panel or reloading the page
+    // keeps the plan); this half only mirrors it. The module-level watcher owns
+    // the fire moment, because the panel may be unmounted by then: it covers the
+    // whole document with the plugin's own startup animation, waits for the
+    // restarted Host to answer, and reloads once. That reload skips the boot
+    // animation through a sessionStorage flag (`splash.js` reads it), so the
+    // animation plays exactly once — during the downtime it is covering.
+    // ---------------------------------------------------------------------
+    /** Route action of the plan (`GET` reads it, `POST {enabled}` flips it). */
+    const RESTART_ACTION = 'restart';
+    /** sessionStorage key that makes the post-restart load skip the boot cover. */
+    const RESTART_SKIP_SPLASH_KEY = 'dsh-mikufan:boot-splash-skip';
+    /** How often the cover probes for the restarted Host. */
+    const RESTART_RETURN_POLL_MS = 700;
+    /** Shortest time the cover stays up, so the animation can finish. */
+    const RESTART_COVER_MIN_MS = 5200;
+    /** Give up waiting for the Host after this long and reload anyway. */
+    const RESTART_COVER_MAX_MS = 20000;
+
+    const restartListeners = new Set();
+    /** The panel's view of the Host plan (the only thing components read). */
+    let restartState = {
+      loaded: false,
+      scheduled: false,
+      remainingMs: 0,
+      deadline: '',
+      activeSessions: 0,
+      firedAt: '',
+      error: null,
+      dryRun: false,
+      /** Identity of the Host process that answered; a reload needs a new one. */
+      bootId: '',
+      /** The clean (token-less) URL that process serves. */
+      url: '',
+      /** Synthetic: the countdown reached zero and the cover is up. */
+      restarting: false,
+    };
+    /** Absolute ms deadline of the plan; 0 when nothing is planned. */
+    let restartDeadlineMs = 0;
+    /** Fire-moment bookkeeping: timer, countdown tick, cover element, splash. */
+    const restartWatch = { timer: null, tick: null, coverSince: 0, coverElement: null, returning: false, splashEnded: false, splashHtml: '', oldBootId: '' };
+    /** The panel's translator, captured by `apply` for the cover's label. */
+    let restartTranslator = null;
+
+    function subscribeRestart(listener) {
+      restartListeners.add(listener);
+      return () => {
+        restartListeners.delete(listener);
+      };
+    }
+
+    function getRestartState() {
+      return restartState;
+    }
+
+    function emitRestart() {
+      for (const listener of [...restartListeners]) listener();
+    }
+
+    /** Milliseconds left on the plan, for the footer's once-a-second countdown. */
+    function restartRemainingMs() {
+      if (restartDeadlineMs === 0) return restartState.remainingMs;
+      return Math.max(0, restartDeadlineMs - Date.now());
+    }
+
+    /** Adopt one Host payload — the only writer of the plan state. */
+    function adoptRestartStatus(value) {
+      if (value === null || typeof value !== 'object') return;
+      const scheduled = value.scheduled === true;
+      const parsedDeadline = scheduled ? Date.parse(String(value.deadline ?? '')) : Number.NaN;
+      restartDeadlineMs = Number.isFinite(parsedDeadline) ? parsedDeadline : 0;
+      const reported = Number.isFinite(value.remainingMs) ? Math.max(0, value.remainingMs) : 0;
+      restartState = {
+        loaded: true,
+        scheduled,
+        remainingMs: scheduled ? (restartDeadlineMs === 0 ? reported : Math.max(0, restartDeadlineMs - Date.now())) : 0,
+        deadline: scheduled ? String(value.deadline ?? '') : '',
+        activeSessions: Number.isFinite(value.activeSessions) ? Math.max(0, Math.floor(value.activeSessions)) : 0,
+        firedAt: typeof value.firedAt === 'string' ? value.firedAt : '',
+        error: typeof value.error === 'string' ? value.error : null,
+        dryRun: value.dryRun === true,
+        bootId: typeof value.bootId === 'string' ? value.bootId : '',
+        url: typeof value.url === 'string' ? value.url : '',
+        restarting: restartState.restarting,
+      };
+      if (scheduled) {
+        armRestartWatch(restartState.remainingMs);
+      } else if (!restartState.restarting) {
+        disarmRestartWatch();
+      }
+      emitRestart();
+    }
+
+    /**
+     * Read the Host plan.
+     * @returns the payload, or `null` when the Host is unreachable (expected
+     *   while it is down: the cover has its own return probe).
+     */
+    async function pollRestartStatus() {
+      try {
+        const value = await callHost(RESTART_ACTION, { method: 'GET', headers: { accept: 'application/json' } });
+        adoptRestartStatus(value);
+        return value !== null && typeof value === 'object' ? value : {};
+      } catch {
+        return null;
+      }
+    }
+
+    /** Flip the plan (`true` arms, `false` cancels). Host errors keep their code. */
+    async function requestRestartPlan(enabled) {
+      const value = await callHost(RESTART_ACTION, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ enabled: enabled === true }),
+      });
+      adoptRestartStatus(value);
+      return value;
+    }
+
+    function disarmRestartWatch() {
+      if (restartWatch.timer !== null) {
+        clearTimeout(restartWatch.timer);
+        restartWatch.timer = null;
+      }
+      if (restartWatch.tick !== null) {
+        clearTimeout(restartWatch.tick);
+        restartWatch.tick = null;
+      }
+    }
+
+    /** Re-render the countdown once a second while a plan is pending. */
+    function tickRestartCountdown() {
+      restartWatch.tick = null;
+      if (restartWatch.timer === null || restartState.restarting) return;
+      // A *new* object is what makes `useSyncExternalStore` repaint the footer:
+      // emitting with the same snapshot is a no-op for React, which is why the
+      // countdown used to freeze at six.
+      restartState = { ...restartState, remainingMs: restartRemainingMs() };
+      emitRestart();
+      restartWatch.tick = setTimeout(tickRestartCountdown, 1000);
+    }
+
+    /** Arm the local timer that shows the cover when the Host's countdown ends. */
+    function armRestartWatch(remainingMs) {
+      disarmRestartWatch();
+      if (restartState.restarting) return;
+      if (!restartState.scheduled && !(Number.isFinite(remainingMs) && remainingMs > 0)) return;
+      const wait = Number.isFinite(remainingMs) ? Math.max(0, Math.min(remainingMs, 60000)) : 0;
+      restartWatch.timer = setTimeout(() => beginRestarting(), wait);
+      restartWatch.tick = setTimeout(tickRestartCountdown, 1000);
+      void prefetchRestartSplash();
+    }
+
+    /** Cache the splash document while the Host still serves it (before the fire). */
+    async function prefetchRestartSplash() {
+      if (restartWatch.splashHtml !== '') return;
+      if (!features.splashEnabled) return;
+      try {
+        const base =
+          typeof document !== 'undefined' && typeof document.baseURI === 'string' && document.baseURI !== ''
+            ? document.baseURI
+            : 'http://127.0.0.1/';
+        const response = await fetch(new URL('mikufan/splash', base).href, { headers: { accept: 'text/html' } });
+        if (response?.ok !== true) return;
+        const html = await response.text();
+        if (typeof html === 'string' && html !== '') restartWatch.splashHtml = html;
+      } catch {
+        /* the cover falls back to a plain backdrop */
+      }
+    }
+
+    /** One localized cover string, through the panel's translator when available. */
+    function restartLabel(key, fallback) {
+      const translate = restartTranslator;
+      if (typeof translate !== 'function') return fallback;
+      try {
+        const text = translate(key, fallback);
+        return typeof text === 'string' && text !== '' ? text : fallback;
+      } catch {
+        return fallback;
+      }
+    }
+
+    /** The cover's label. */
+    function restartCoverLabel() {
+      return restartLabel('restart.pending.restarting', '正在重启…');
+    }
+
+    /** One element with a class name (the cover is built without React). */
+    function restartElement(tag, className) {
+      const node = document.createElement(tag);
+      if (typeof className === 'string' && className !== '') node.className = className;
+      return node;
+    }
+
+    /** Put the full-screen restart cover up (the plugin's own boot animation). */
+    function showRestartCover() {
+      if (restartWatch.coverElement !== null) return;
+      if (typeof document === 'undefined' || document.body === undefined || typeof document.body.appendChild !== 'function') return;
+      const label = restartCoverLabel();
+      const cover = restartElement('div', 'MikufanRestartCover');
+      cover.setAttribute?.('role', 'alert');
+      cover.setAttribute?.('aria-live', 'assertive');
+      if (restartWatch.splashHtml !== '') {
+        // `srcdoc` (not `src`): the Host is shutting down, so the animation must
+        // not depend on a request that may land after the listener closed.
+        const frame = restartElement('iframe', 'MikufanRestartFrame');
+        frame.setAttribute?.('title', label);
+        frame.setAttribute?.('scrolling', 'no');
+        frame.setAttribute?.('tabindex', '-1');
+        frame.setAttribute?.('srcdoc', restartWatch.splashHtml);
+        cover.appendChild(frame);
+      }
+      cover.appendChild(restartElement('div', 'MikufanRestartShield'));
+      const status = restartElement('div', 'MikufanRestartStatus');
+      status.appendChild(restartElement('span', 'MikufanRestartDot'));
+      const text = restartElement('span', 'MikufanRestartText');
+      text.textContent = label;
+      status.appendChild(text);
+      cover.appendChild(status);
+      document.body.appendChild(cover);
+      restartWatch.coverElement = cover;
+      restartWatch.coverSince = Date.now();
+      restartWatch.splashEnded = false;
+      if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+        window.addEventListener('message', onRestartSplashMessage);
+      }
+    }
+
+    /** The splash's embed bridge reports the end of the animation. */
+    function onRestartSplashMessage(event) {
+      const data = event?.data;
+      if (data === null || typeof data !== 'object') return;
+      if (data.source !== 'dsh-mikufan-splash') return;
+      if (data.type === 'ended') restartWatch.splashEnded = true;
+    }
+
+    /** Take the cover down again. */
+    function hideRestartCover() {
+      const cover = restartWatch.coverElement;
+      restartWatch.coverElement = null;
+      if (cover === null || cover === undefined) return;
+      if (typeof window !== 'undefined' && typeof window.removeEventListener === 'function') {
+        window.removeEventListener('message', onRestartSplashMessage);
+      }
+      if (typeof cover.remove === 'function') {
+        cover.remove();
+        return;
+      }
+      const parent = cover.parentNode;
+      if (parent !== null && parent !== undefined && typeof parent.removeChild === 'function') parent.removeChild(cover);
+    }
+
+    /** Countdown reached zero: cover the page and wait for the new Host. */
+    function beginRestarting() {
+      restartWatch.timer = null;
+      if (restartWatch.tick !== null) {
+        clearTimeout(restartWatch.tick);
+        restartWatch.tick = null;
+      }
+      if (restartState.restarting) return;
+      restartWatch.returning = false;
+      // Remember which process was answering: the one that is shutting down keeps
+      // replying for a moment, and only a *different* boot id means the new Host.
+      restartWatch.oldBootId = restartState.bootId;
+      restartState = { ...restartState, restarting: true, scheduled: false, remainingMs: 0 };
+      emitRestart();
+      showRestartCover();
+      void waitForHostReturn();
+    }
+
+    /** Rewrite the cover's status line (the timeout path keeps the cover up). */
+    function setRestartCoverText(text) {
+      const cover = restartWatch.coverElement;
+      if (cover === null || cover === undefined) return;
+      const line = findRestartCoverText(cover);
+      if (line !== null && line !== undefined) line.textContent = text;
+    }
+
+    /** Depth-first search for the status text node inside the cover. */
+    function findRestartCoverText(node) {
+      if (node === null || node === undefined || typeof node !== 'object') return null;
+      if (node.className === 'MikufanRestartText') return node;
+      for (const child of node.children ?? []) {
+        const hit = findRestartCoverText(child);
+        if (hit !== null) return hit;
+      }
+      return null;
+    }
+
+    /**
+     * Fetch the app root with this browser's session cookie.
+     * @returns the HTTP status (0 when the request could not be made).
+     */
+    async function probeAppIndex(target) {
+      try {
+        const base =
+          typeof document !== 'undefined' && typeof document.baseURI === 'string' && document.baseURI !== ''
+            ? document.baseURI
+            : 'http://127.0.0.1/';
+        const url = typeof target === 'string' && target !== '' ? target : new URL('/', base).href;
+        const response = await fetch(url, {
+          cache: 'no-store',
+          credentials: 'same-origin',
+          headers: { accept: 'text/html' },
+        });
+        return typeof response?.status === 'number' ? response.status : 0;
+      } catch {
+        return 0;
+      }
+    }
+
+    /** Leave the cover once the restarted Host is serving the app again. */
+    async function waitForHostReturn() {
+      if (restartWatch.returning) return;
+      restartWatch.returning = true;
+      const startedAt = Date.now();
+      /** Clean URL of the new process, set once its index answered 200. */
+      let ready = '';
+      let needsAuth = false;
+      for (;;) {
+        await new Promise((resolve) => setTimeout(resolve, RESTART_RETURN_POLL_MS));
+        const elapsed = Date.now() - startedAt;
+        if (ready === '' && !needsAuth) {
+          const value = await pollRestartStatus();
+          if (value !== null && typeof value === 'object') {
+            // A reply from the process that is shutting down proves nothing: it
+            // still answers for a moment. Only a new boot id means the successor.
+            const fresh = typeof value.bootId === 'string' && value.bootId !== restartWatch.oldBootId;
+            if (fresh) {
+              const url = typeof value.url === 'string' ? value.url : '';
+              const status = await probeAppIndex(url);
+              if (status === 200) {
+                ready = url !== '' ? url : new URL('/', document.baseURI).href;
+              } else if (status === 401 || status === 403) {
+                // The session cookie did not survive (or expired): entering the app
+                // needs the launch URL `dsh web` prints, which we cannot know here.
+                needsAuth = true;
+              }
+            }
+          }
+        }
+        if (needsAuth) break;
+        if (ready !== '' && (restartWatch.splashEnded || elapsed >= RESTART_COVER_MIN_MS)) break;
+        if (elapsed >= RESTART_COVER_MAX_MS) break;
+      }
+      if (needsAuth) {
+        restartWatch.returning = false;
+        setRestartCoverText(restartLabel('restart.failed.auth', '需要重新认证：请打开 dsh web 打印的链接'));
+        return;
+      }
+      if (ready === '') {
+        // The Host never came back: keep the cover (a reload here would only show
+        // the browser's connection error) and tell the user what to do.
+        restartWatch.returning = false;
+        setRestartCoverText(restartLabel('restart.failed.timeout', '重启尚未完成，请稍后手动刷新页面'));
+        return;
+      }
+      try {
+        sessionStorage.setItem(RESTART_SKIP_SPLASH_KEY, '1');
+      } catch {
+        /* a private-mode page simply plays the boot animation again */
+      }
+      hideRestartCover();
+      const location = typeof window !== 'undefined' ? window.location : undefined;
+      if (location === undefined || location === null) return;
+      // Navigate to the clean advertised URL, not `reload()`: the address bar may
+      // still carry the previous process's launch token, which the new process
+      // answers with 401 while the session cookie itself stays valid.
+      if (typeof location.replace === 'function') {
+        location.replace(ready);
+        return;
+      }
+      if (typeof location.reload === 'function') location.reload();
+    }
+
+    installStyle(
+      STYLE_RESTART,
+      `
+/* The restart cover is a brand frame over the whole document, exactly like the
+   Host-injected boot cover (splash.js): its artwork is deliberately its own
+   palette rather than theme tokens, and it sits above every app layer. */
+.MikufanRestartCover{position:fixed;inset:0;z-index:2147483000;background:#050507;overflow:hidden;isolation:isolate;user-select:none;-webkit-user-select:none}
+.MikufanRestartFrame{position:absolute;inset:0;display:block;width:100%;height:100%;border:0;background:#050507}
+.MikufanRestartShield{position:absolute;inset:0;cursor:default}
+.MikufanRestartStatus{position:absolute;left:50%;bottom:36px;transform:translateX(-50%);display:flex;align-items:center;gap:10px;padding:10px 18px;font-size:13px;line-height:20px;color:rgba(255,255,255,.86);letter-spacing:.02em;white-space:nowrap}
+.MikufanRestartDot{flex:0 0 auto;width:8px;height:8px;border-radius:50%;background:#7fd1ff;box-shadow:0 0 10px rgba(127,209,255,.75);animation:MikufanRestartPulse 1.4s ease-in-out infinite}
+@keyframes MikufanRestartPulse{0%,100%{opacity:.35;transform:scale(.85)}50%{opacity:1;transform:scale(1)}}
+@media (prefers-reduced-motion:reduce){.MikufanRestartDot{animation:none}}
+`,
+    );
 
     installStyle(
       STYLE_MEMORY,
@@ -3879,10 +4345,14 @@ window.__ModuleLoader__.load({
 
       const enabledCount = servers.filter((server) => server.enabled).length;
       const needle = query.trim().toLowerCase();
+      // Newest-updated card first: the Host stamps `updatedAt` on every create,
+      // edit and enable-toggle, so the card that changed last leads the grid.
+      // The search below only narrows that order.
+      const ordered = newestFirst(servers);
       const visible =
         needle === ''
-          ? servers
-          : servers.filter((server) =>
+          ? ordered
+          : ordered.filter((server) =>
               [server.name, server.transport, server.command ?? '', server.url ?? '', server.cwd ?? '']
                 .join('\n')
                 .toLowerCase()
@@ -4590,12 +5060,15 @@ window.__ModuleLoader__.load({
 
       const detailEntry = detailId === null ? null : (entries.find((entry) => entry.id === detailId) ?? null);
       const needle = query.trim().toLowerCase();
-      // The search matches the skill name and description (the id is the
-      // directory name, so a name query covers it as well).
+      // Newest-updated card first — a skill's `updatedAt` is its file mtime, so
+      // editing or toggling one brings it to the top. The search matches the
+      // skill name and description (the id is the directory name, so a name
+      // query covers it as well) and keeps that order.
+      const ordered = newestFirst(entries);
       const visible =
         needle === ''
-          ? entries
-          : entries.filter((entry) => [entry.name, entry.description, entry.id].join('\n').toLowerCase().includes(needle));
+          ? ordered
+          : ordered.filter((entry) => [entry.name, entry.description, entry.id].join('\n').toLowerCase().includes(needle));
       const searching = needle !== '';
       const onRefresh = () => {
         if (refreshing) return;
@@ -4890,6 +5363,22 @@ window.__ModuleLoader__.load({
     }
 
     /**
+     * 48px restart glyph for the one-click restart card (the user's supplied
+     * icon): a circular arrow with the tail hooking in, single-color via
+     * `currentColor` at the svg root. The source path is 1024-based; the
+     * geometry is unchanged, only the fill color moved to the svg root.
+     */
+    function RestartIcon() {
+      return h(
+        'svg',
+        { width: 48, height: 48, viewBox: '0 0 1024 1024', fill: 'currentColor', 'aria-hidden': true },
+        h('path', {
+          d: 'M865.856 257.6a42.88 42.88 0 0 0-16.064 57.728 379.52 379.52 0 0 1 43.072 177.472c0 117.632-52.544 226.432-146.688 301.696a374.4 374.4 0 0 1-189.056 78.144 381.44 381.44 0 0 1-316.032-108.864 379.136 379.136 0 0 1-111.68-270.272A380.8 380.8 0 0 1 222.08 245.12c2.944-2.944 7.296-2.944 9.472 0l32.192 40.96a35.84 35.84 0 0 0 34.304 13.12 24.576 24.576 0 0 0 13.888-6.592 34.368 34.368 0 0 0 11.648-18.24l42.304-165.824a35.84 35.84 0 0 0-6.592-30.656A34.368 34.368 0 0 0 331.648 64H160.832a33.856 33.856 0 0 0-20.416 6.592 26.496 26.496 0 0 0-9.472 12.416c-5.12 11.712-3.648 25.6 4.352 36.544l35.776 46.72c2.176 2.176 1.472 5.824-0.704 8.064C71.808 280.256 21.504 432.896 55.808 595.072c40.896 190.656 200 336 393.408 360.832A467.456 467.456 0 0 0 979.072 492.8a457.6 457.6 0 0 0-54.72-218.432 42.304 42.304 0 0 0-58.496-16.768z',
+        }),
+      );
+    }
+
+    /**
      * Card footer for the delete-sessions feature: how many sessions are
      * currently marked for the next startup sweep. Reads the same marked-set
      * store the sidebar rows use, so the count updates live.
@@ -5032,6 +5521,38 @@ window.__ModuleLoader__.load({
     }
 
     /**
+     * Card footer for the one-click restart card: the plan state in the order the
+     * user needs it — firing, countdown, a session holding the card, a cancelled
+     * or failed plan, then the idle line.
+     */
+    function RestartPendingFooter({ translate }) {
+      const state = useSyncExternalStore(subscribeRestart, getRestartState);
+      let text;
+      let hot = false;
+      if (state.restarting) {
+        text = translate('restart.pending.restarting', '正在重启…');
+      } else if (state.scheduled) {
+        const seconds = Math.max(0, Math.ceil(restartRemainingMs() / 1000));
+        text = formatTemplate(translate('restart.pending.countdown', '{n} 秒后执行重启'), { n: String(seconds) });
+        hot = true;
+      } else if (state.activeSessions > 0) {
+        text = translate('restart.pending.busy', '有会话尚在运行');
+        hot = true;
+      } else if (state.error === 'busy' && state.firedAt !== '') {
+        text = translate('restart.pending.cancelledBusy', '有会话尚在运行，重启已取消');
+        hot = true;
+      } else if (state.error === 'relaunch-failed') {
+        text = translate('restart.failed.relaunch', '重启进程启动失败，请手动重启 DSH');
+        hot = true;
+      } else if (!state.loaded) {
+        text = translate('restart.failed.read', '无法读取重启状态');
+      } else {
+        text = translate('restart.pending.none', '无重启计划');
+      }
+      return h('div', { className: 'MikufanCpCardFoot' + (hot ? ' MikufanCpCardFootHot' : '') }, text);
+    }
+
+    /**
      * One setting card with an iOS-style switch. The switch is styled like the
      * host's own switch primitive (the plugin cannot import Client packages).
      *
@@ -5041,6 +5562,46 @@ window.__ModuleLoader__.load({
      * @param props.descriptionKey - locale key of the card description.
      * @param props.fallbackDescription - zh fallback of the description.
      * @param props.translate - localized text for this plugin's namespace.
+     */
+    /**
+     * A dashboard card's title. Cards that own a sub-page (`onOpen`) render the
+     * title as a real button: it is the keyboard and screen-reader path for the
+     * whole-card click, so the card itself can stay a plain container around its
+     * switch. A card without a page keeps a bare heading.
+     *
+     * @param props.title - the localized title text.
+     * @param props.onOpen - opens the card's page, or null for a page-less card.
+     * @param props.openLabel - the button's accessible name ("打开「记忆」页").
+     */
+    function CardTitle({ title, onOpen, openLabel }) {
+      if (typeof onOpen !== 'function') return h('h2', { className: 'MikufanCpCardTitle' }, title);
+      return h(
+        'h2',
+        { className: 'MikufanCpCardTitle' },
+        h(
+          'button',
+          {
+            type: 'button',
+            className: 'MikufanCpCardTitleButton',
+            title: openLabel,
+            'aria-label': openLabel,
+            onClick: (event) => {
+              // The card root navigates too; one click, one page change.
+              event.stopPropagation();
+              onOpen();
+            },
+          },
+          title,
+        ),
+      );
+    }
+
+    /**
+     * One dashboard card with a switch. When the card owns a sub-page
+     * (`onOpen`), clicking anywhere on it opens that page — the switch stops its
+     * own click from bubbling, and the title carries the keyboard path.
+     *
+     * @param props.onOpen - opens the card's page, or null for a page-less card.
      */
     function FeatureCard(props) {
       const {
@@ -5053,12 +5614,17 @@ window.__ModuleLoader__.load({
         icon = null,
         iconDanger = false,
         footer = null,
+        onOpen = null,
       } = props;
       const enabled = useSyncExternalStore(subscribeFeatures, () => getFeature(name));
       const [busy, setBusy] = useState(false);
       const [failed, setFailed] = useState(false);
       const title = translate(titleKey, fallbackTitle);
       const description = translate(descriptionKey, fallbackDescription);
+      const navigable = typeof onOpen === 'function';
+      const openLabel = navigable
+        ? formatTemplate(translate('dashboard.openPage', '打开「{title}」页'), { title })
+        : undefined;
       const onChange = () => {
         if (busy) return;
         setFailed(false);
@@ -5067,9 +5633,12 @@ window.__ModuleLoader__.load({
           .catch(() => setFailed(true))
           .finally(() => setBusy(false));
       };
+      const cardProps = navigable
+        ? { className: 'MikufanCpCard', 'data-navigable': 'true', onClick: onOpen }
+        : { className: 'MikufanCpCard' };
       return h(
         'div',
-        { className: 'MikufanCpCard' },
+        cardProps,
         h(
           'div',
           { className: 'MikufanCpCardBody' },
@@ -5080,7 +5649,7 @@ window.__ModuleLoader__.load({
             h(
               'div',
               { className: 'MikufanCpCardHead' },
-              h('h2', { className: 'MikufanCpCardTitle' }, title),
+              h(CardTitle, { title, onOpen: navigable ? onOpen : null, openLabel }),
               h(
                 'button',
                 {
@@ -5091,7 +5660,10 @@ window.__ModuleLoader__.load({
                   'aria-label': title,
                   title,
                   disabled: busy,
-                  onClick: onChange,
+                  onClick: (event) => {
+                    event.stopPropagation();
+                    onChange();
+                  },
                 },
                 h('span', { className: 'MikufanSwitchThumb' }),
               ),
@@ -5109,7 +5681,8 @@ window.__ModuleLoader__.load({
     /**
      * One dashboard card without a switch: the Skills and Agent pages have no
      * on/off preference, so their cards summarize the page instead (icon +
-     * title + description + footer).
+     * title + description + footer). These cards always own a page, so the whole
+     * card is clickable.
      *
      * @param props.titleKey - locale key of the card title.
      * @param props.fallbackTitle - zh fallback of the card title.
@@ -5118,12 +5691,21 @@ window.__ModuleLoader__.load({
      * @param props.icon - the 48px glyph element.
      * @param props.footer - the footer element (status line).
      * @param props.translate - localized text for this plugin's namespace.
+     * @param props.onOpen - opens the card's page.
      */
     function SummaryCard(props) {
-      const { translate, titleKey, fallbackTitle, descriptionKey, fallbackDescription, icon, footer } = props;
+      const { translate, titleKey, fallbackTitle, descriptionKey, fallbackDescription, icon, footer, onOpen = null } = props;
+      const title = translate(titleKey, fallbackTitle);
+      const navigable = typeof onOpen === 'function';
+      const openLabel = navigable
+        ? formatTemplate(translate('dashboard.openPage', '打开「{title}」页'), { title })
+        : undefined;
+      const cardProps = navigable
+        ? { className: 'MikufanCpCard', 'data-navigable': 'true', onClick: onOpen }
+        : { className: 'MikufanCpCard' };
       return h(
         'div',
-        { className: 'MikufanCpCard' },
+        cardProps,
         h(
           'div',
           { className: 'MikufanCpCardBody' },
@@ -5134,7 +5716,7 @@ window.__ModuleLoader__.load({
             h(
               'div',
               { className: 'MikufanCpCardHead' },
-              h('h2', { className: 'MikufanCpCardTitle' }, translate(titleKey, fallbackTitle)),
+              h(CardTitle, { title, onOpen: navigable ? onOpen : null, openLabel }),
             ),
             h('p', { className: 'MikufanCpCardDesc' }, translate(descriptionKey, fallbackDescription)),
           ),
@@ -5148,12 +5730,16 @@ window.__ModuleLoader__.load({
      * but its switch drives the LAN engine preference (a different Host store)
      * and needs the status hydrated on mount.
      */
-    function LanFeatureCard({ translate }) {
+    function LanFeatureCard({ translate, onOpen = null }) {
       const current = useSyncExternalStore(subscribeLan, getLanStatus);
       const enabled = current?.saved?.lanAccessEnabled === true;
       const [busy, setBusy] = useState(false);
       const [failed, setFailed] = useState(false);
       const title = translate('lanFeature.title', '局域网访问');
+      const navigable = typeof onOpen === 'function';
+      const openLabel = navigable
+        ? formatTemplate(translate('dashboard.openPage', '打开「{title}」页'), { title })
+        : undefined;
       useEffect(() => {
         hydrateLanStatus();
       }, []);
@@ -5169,9 +5755,12 @@ window.__ModuleLoader__.load({
           .catch(() => setFailed(true))
           .finally(() => setBusy(false));
       };
+      const cardProps = navigable
+        ? { className: 'MikufanCpCard', 'data-navigable': 'true', onClick: onOpen }
+        : { className: 'MikufanCpCard' };
       return h(
         'div',
-        { className: 'MikufanCpCard' },
+        cardProps,
         h(
           'div',
           { className: 'MikufanCpCardBody' },
@@ -5182,7 +5771,7 @@ window.__ModuleLoader__.load({
             h(
               'div',
               { className: 'MikufanCpCardHead' },
-              h('h2', { className: 'MikufanCpCardTitle' }, title),
+              h(CardTitle, { title, onOpen: navigable ? onOpen : null, openLabel }),
               h(
                 'button',
                 {
@@ -5193,7 +5782,10 @@ window.__ModuleLoader__.load({
                   'aria-label': title,
                   title,
                   disabled: busy || !isLanLoaded(),
-                  onClick: onChange,
+                  onClick: (event) => {
+                    event.stopPropagation();
+                    onChange();
+                  },
                 },
                 h('span', { className: 'MikufanSwitchThumb' }),
               ),
@@ -5208,8 +5800,89 @@ window.__ModuleLoader__.load({
       );
     }
 
-    /** The dashboard page: four switch cards plus the Skills / Agent / MCP summary cards. */
-    function DashboardPage({ translate }) {      return h(
+    /**
+     * The one-click restart card: a switch that arms the Host's six-second
+     * countdown, plus the footer that mirrors it.
+     *
+     * The page never counts down on its own — the Host deadline is the only
+     * source of truth, the module watcher re-renders it once a second, and a
+     * running session disables the switch (the Host refuses the plan anyway).
+     * The plan is read once per dashboard mount: the panel cannot be open while
+     * this page's own session runs, and a stale view is corrected by the 409 the
+     * Host answers with.
+     */
+    function RestartCard({ translate }) {
+      const state = useSyncExternalStore(subscribeRestart, getRestartState);
+      const [busy, setBusy] = useState(false);
+      const [failed, setFailed] = useState(false);
+      useEffect(() => {
+        void pollRestartStatus();
+      }, []);
+      const title = translate('restartFeature.title', '一键重启');
+      const locked = state.restarting || state.activeSessions > 0 || !state.loaded;
+      const hint = state.activeSessions > 0 ? translate('restart.busy.hint', '有会话在运行，暂不能重启') : title;
+      const onChange = () => {
+        if (busy || locked) return;
+        setFailed(false);
+        setBusy(true);
+        Promise.resolve(requestRestartPlan(!state.scheduled))
+          .catch((error) => {
+            // A 409 means a session started meanwhile: refresh the footer state
+            // so it reads 「有会话尚在运行」 instead of a generic failure.
+            if (error?.code === 'busy') {
+              void pollRestartStatus();
+              return;
+            }
+            setFailed(true);
+          })
+          .finally(() => setBusy(false));
+      };
+      return h(
+        'div',
+        { className: 'MikufanCpCard' },
+        h(
+          'div',
+          { className: 'MikufanCpCardBody' },
+          h('div', { className: 'MikufanCpCardIcon' }, h(RestartIcon, null)),
+          h(
+            'div',
+            { className: 'MikufanCpCardMain' },
+            h(
+              'div',
+              { className: 'MikufanCpCardHead' },
+              h('h2', { className: 'MikufanCpCardTitle' }, title),
+              h(
+                'button',
+                {
+                  type: 'button',
+                  role: 'switch',
+                  className: 'MikufanSwitch',
+                  'aria-checked': state.scheduled,
+                  'aria-label': hint,
+                  title: hint,
+                  disabled: busy || locked,
+                  onClick: onChange,
+                },
+                h('span', { className: 'MikufanSwitchThumb' }),
+              ),
+            ),
+            h('p', { className: 'MikufanCpCardDesc' }, translate('restartFeature.description', '打开开关后六秒将重启一次，倒计时结束前关闭开关取消重启。')),
+            failed
+              ? h('div', { className: 'MikufanCpCardError', role: 'alert' }, translate('restart.failed.plan', '无法保存重启计划，请重试。'))
+              : null,
+          ),
+        ),
+        h(RestartPendingFooter, { translate }),
+      );
+    }
+
+    /**
+     * The dashboard page: four switch cards plus the Skills / Agent / MCP
+     * summary cards. Every card that owns a sub-page opens it on click
+     * (`onOpenPage` = the panel's tab selector); 删除会话 and 启动动画 have no
+     * page of their own and stay inert apart from their switch.
+     */
+    function DashboardPage({ translate, onOpenPage }) {      return h(
         'div',
         { role: 'tabpanel', 'aria-label': translate('control.panel.tab.dashboard', '主页') },
         h(PageHead, {
@@ -5252,8 +5925,9 @@ window.__ModuleLoader__.load({
             translate,
             icon: h(MemoryIcon, null),
             footer: h(MemoryPendingFooter, { translate }),
+            onOpen: () => onOpenPage('memory'),
           }),
-          h(LanFeatureCard, { translate }),
+          h(LanFeatureCard, { translate, onOpen: () => onOpenPage('lan') }),
           h(SummaryCard, {
             translate,
             titleKey: 'skillsFeature.title',
@@ -5262,6 +5936,7 @@ window.__ModuleLoader__.load({
             fallbackDescription: '管理助手可用的技能扩展。',
             icon: h(SkillsIcon, null),
             footer: h(SkillsPendingFooter, { translate }),
+            onOpen: () => onOpenPage('skills'),
           }),
           h(SummaryCard, {
             translate,
@@ -5271,6 +5946,7 @@ window.__ModuleLoader__.load({
             fallbackDescription: '编辑所选机器上的AGENTS.md。代码仓库的说明也可能适用。',
             icon: h(AgentIcon, null),
             footer: h(AgentPendingFooter, { translate }),
+            onOpen: () => onOpenPage('agent'),
           }),
           h(SummaryCard, {
             translate,
@@ -5280,7 +5956,9 @@ window.__ModuleLoader__.load({
             fallbackDescription: '按 ChatGPT/Codex 标准管理 MCP 服务器连接。',
             icon: h(McpIcon, null),
             footer: h(McpPendingFooter, { translate }),
+            onOpen: () => onOpenPage('mcp'),
           }),
+          h(RestartCard, { translate }),
         ),
       );
     }
@@ -5314,12 +5992,16 @@ window.__ModuleLoader__.load({
 
       const enabledCount = entries.filter((entry) => entry.enabled).length;
       const needle = query.trim().toLowerCase();
-      // The search matches the content plus the localized type and source, so
-      // typing 项目 or Agent works as well as a phrase from the memory itself.
+      // Newest-updated card first: an edited (or toggled) memory moves up, so
+      // the top of the grid is always what changed last. The search below only
+      // narrows that order, never reshuffles it. The search matches the content
+      // plus the localized type and source, so typing 项目 or Agent works as
+      // well as a phrase from the memory itself.
+      const ordered = newestFirst(entries);
       const visible =
         needle === ''
-          ? entries
-          : entries.filter((entry) =>
+          ? ordered
+          : ordered.filter((entry) =>
               [
                 entry.content,
                 translate(`memory.type.${entry.type}`, entry.type),
@@ -5644,7 +6326,7 @@ window.__ModuleLoader__.load({
           'div',
           { className: 'MikufanCpContent' },
           tab === 'dashboard'
-            ? h(DashboardPage, { translate })
+            ? h(DashboardPage, { translate, onOpenPage: select })
             : tab === 'memory'
               ? h(MemoryPageBody, { translate })
               : tab === 'lan'
@@ -5835,6 +6517,12 @@ window.__ModuleLoader__.load({
       inject: ['slots', 'locale'],
       apply(ctx) {
         const translate = createTranslate(ctx);
+        // The restart cover is built without React (it must outlive the panel),
+        // so the panel's translator is handed to the module-level watcher here.
+        restartTranslator = translate;
+        // One read at boot: a plan armed in another tab (or before a reload) is
+        // picked up here, and the watcher takes over from that payload.
+        void pollRestartStatus();
 
         /**
          * Open one skill's SKILL.md in the right Sidebar for reading. Prefers

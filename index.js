@@ -51,6 +51,13 @@
  * `<DSH home>/dsh-mikufan/mcp.json`; `<prefix>/mcp…` lists, creates, edits,
  * enables and removes the servers.
  *
+ * Component 8, "One-click restart" (`restart.js` + `relaunch.mjs`): the
+ * dashboard card arms a six-second Host-side countdown; `<prefix>/restart`
+ * reads and flips it. Firing spawns a detached helper that waits for this pid
+ * to exit and then starts the same command line again, while the launcher's
+ * `appExit` service tears the tree down in order. A running session always
+ * blocks the plan — a restart never cuts a conversation.
+ *
  * The marked set lives in its own JSON file, never in `workspace.json`: that
  * document's in-memory state is authoritative while the Host runs, so a raw
  * file edit would be silently republished. Registry references are therefore
@@ -75,6 +82,14 @@ import {
   SPLASH_ROUTE,
 } from './splash.js';
 import { createMemoryTools, MEMORY_FILE_NAME, MemoryStore, publicEntry, queryTerms, similarity } from './memory.js';
+import {
+  countRunningSessions,
+  relaunchDsh,
+  RESTART_DELAY_MS,
+  RESTART_LOG_NAME,
+  RESTART_SHUTDOWN_WATCHDOG_MS,
+  RestartController,
+} from './restart.js';
 import {
   cleanLanHost,
   cleanLanMaxConnections,
@@ -772,13 +787,17 @@ function publicSkill(detail) {
  * - `PATCH <prefix>/mcp/<name>` → replaces one server (name change included)
  * - `PATCH <prefix>/mcp/<name>/enabled` `{enabled}` → flips one `enabled` flag
  * - `DELETE <prefix>/mcp/<name>` → removes one server
+ * - `GET  <prefix>/restart` → `{ scheduled, remainingMs, deadline,
+ *   activeSessions, firedAt, error, dryRun }` (the one-click restart plan)
+ * - `POST <prefix>/restart` `{enabled}` → arms the six-second countdown, or
+ *   clears it when `enabled` is false; 409 `busy` while a session is running
  *
  * @param options - ctx, delete-session store, preference store, memory store,
  *   LAN facade, the managed skills root, the Harness home the Agent page edits,
- *   the MCP store, and the reporter.
+ *   the MCP store, the restart controller, and the reporter.
  * @returns the route handler.
  */
-function createRouteHandler({ ctx, store, preferences, memory, lan, skillsRoot, agentHome, mcp, bundledMarkerFile, log }) {
+function createRouteHandler({ ctx, store, preferences, memory, lan, skillsRoot, agentHome, mcp, bundledMarkerFile, restart, log }) {
   const trusted = (req) => {
     try {
       const connection = ctx.get('connection');
@@ -790,6 +809,22 @@ function createRouteHandler({ ctx, store, preferences, memory, lan, skillsRoot, 
   };
   const envelope = (res, status, value, error) => {
     writeJson(res, status, error === undefined ? { ok: true, value } : { ok: false, error });
+  };
+  /**
+   * The clean (token-less) URL this process serves. The page that comes back
+   * from a restart navigates here instead of reloading its own address: the old
+   * address may carry the previous process's launch token, which the new process
+   * rejects, while the session cookie stays valid across restarts.
+   */
+  const restartStatusValue = (status) => {
+    let url = '';
+    try {
+      const advertised = ctx.get('webApp')?.getAdvertisedUrl?.();
+      if (typeof advertised === 'string') url = advertised;
+    } catch {
+      url = '';
+    }
+    return { ...status, url };
   };
   return async (req, res) => {
     if (!trusted(req)) {
@@ -1021,6 +1056,45 @@ function createRouteHandler({ ctx, store, preferences, memory, lan, skillsRoot, 
             return;
           }
         }
+      }
+      // One-click restart: the card's switch arms a Host-side countdown. The
+      // fire path relaunches through a detached helper and asks the launcher for
+      // a graceful exit, so the process never kills itself without a successor.
+      if (action === 'restart' && req.method === 'GET') {
+        if (restart === undefined) {
+          envelope(res, 503, undefined, { code: 'unavailable', message: 'the restart engine is unavailable' });
+          return;
+        }
+        envelope(res, 200, restartStatusValue(restart.status()));
+        return;
+      }
+      if (action === 'restart' && req.method === 'POST') {
+        if (restart === undefined) {
+          envelope(res, 503, undefined, { code: 'unavailable', message: 'the restart engine is unavailable' });
+          return;
+        }
+        const body = await readJsonBody(req);
+        if (typeof body?.enabled !== 'boolean') {
+          envelope(res, 400, undefined, { code: 'bad-preference', message: 'enabled must be a boolean' });
+          return;
+        }
+        if (!body.enabled) {
+          envelope(res, 200, restartStatusValue(restart.cancel()));
+          return;
+        }
+        const planned = restart.schedule();
+        if (planned.ok !== true) {
+          // A restart must never cut a running session; the panel shows this as
+          // 「有会话尚在运行」 instead of an error toast.
+          envelope(res, 409, undefined, {
+            code: 'busy',
+            message: `${planned.status.activeSessions} session(s) are still running`,
+          });
+          return;
+        }
+        log('restart planned via panel');
+        envelope(res, 200, restartStatusValue(planned.status));
+        return;
       }
       // Skills: the managed user root (`<dshHome>/skills`) the Harness scans.
       if (action === 'skills' && req.method === 'GET') {
@@ -1258,6 +1332,43 @@ export function apply(ctx) {
   const mcp = new McpStore(join(dshHome, PLUGIN_NAME, MCP_STATE_FILE_NAME), (server) =>
     applyMcpEnabled(ctx, server, log),
   );
+  /** Restart log path, shared by this controller and the detached helper. */
+  const restartLogPath = join(dshHome, PLUGIN_NAME, RESTART_LOG_NAME);
+  /**
+   * One-click restart (Component 8, `restart.js`): a Host-side countdown that
+   * ends in a graceful launcher shutdown plus a detached relaunch helper.
+   *
+   * `requestExit` prefers the launcher's own `appExit` service — the same
+   * bounded teardown a SIGTERM gets, so sessions, the LAN proxy and the web
+   * server close in order. The watchdog is the backstop for a plugin holding a
+   * handle open: without it the process would never end, and the helper would
+   * eventually start a second instance on the same port.
+   */
+  const restart = new RestartController({
+    delayMs: RESTART_DELAY_MS,
+    log,
+    logPath: restartLogPath,
+    countRunning: () => countRunningSessions(ctx),
+    dryRun: process.env.DSH_MIKUFAN_RESTART_DRYRUN === '1',
+    requestExit: (code) => {
+      let exit;
+      try {
+        exit = ctx.get('appExit');
+      } catch {
+        exit = undefined;
+      }
+      if (typeof exit === 'function') {
+        exit(code);
+      } else {
+        // No `appExit` (a non-launcher embedding): the dsh launcher installs
+        // SIGTERM/SIGINT handlers that dispose the tree and then exit.
+        process.emit('SIGTERM');
+      }
+      setTimeout(() => process.exit(code), RESTART_SHUTDOWN_WATCHDOG_MS).unref?.();
+    },
+    relaunch: () => relaunchDsh({ logPath: restartLogPath }),
+  });
+  ctx.effect(() => () => restart.dispose(), `${PLUGIN_NAME}: restart countdown`);
   void memory.load();
   log(
     `features: delete-sessions=${preferences.deleteSessionsEnabled ? 'on' : 'off'}, ` +
@@ -1597,7 +1708,7 @@ export function apply(ctx) {
         scoped.webServer.register({
           kind: 'prefix',
           path: ROUTE_PREFIX,
-          handler: createRouteHandler({ ctx, store, preferences, memory, lan, skillsRoot, agentHome: dshHome, mcp, bundledMarkerFile, log }),
+          handler: createRouteHandler({ ctx, store, preferences, memory, lan, skillsRoot, agentHome: dshHome, mcp, bundledMarkerFile, restart, log }),
         }),
       `${PLUGIN_NAME}: ${ROUTE_PREFIX} routes`,
     );
@@ -1624,6 +1735,9 @@ export const __internal = {
   createSplashRouteHandler,
   splashIndexInjections,
   readSplashAsset,
+  RestartController,
+  countRunningSessions,
+  relaunchDsh,
   resolveDshHome,
   isSafeSessionId,
   revealInFileManager,

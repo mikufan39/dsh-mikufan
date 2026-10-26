@@ -67,6 +67,18 @@ const SPLASH_BOOT_SCRIPT = `
   const overlay = document.getElementById('dsh-mikufan-boot');
   if (overlay === null || overlay.dataset.mikufanBound === '1') return;
   overlay.dataset.mikufanBound = '1';
+  /* The one-click restart reloads the page the moment the process is back; that
+     load already played this animation over the downtime, so it enters
+     directly. One-shot: the flag is consumed here. */
+  try {
+    if (sessionStorage.getItem('dsh-mikufan:boot-splash-skip') === '1') {
+      sessionStorage.removeItem('dsh-mikufan:boot-splash-skip');
+      if (overlay.parentNode !== null) overlay.parentNode.removeChild(overlay);
+      return;
+    }
+  } catch (error) {
+    /* no sessionStorage: play the animation like any other load */
+  }
   const frame = document.getElementById('dsh-mikufan-boot-frame');
   const shield = document.getElementById('dsh-mikufan-boot-shield');
   const params = new URLSearchParams(window.location.search);
