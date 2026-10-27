@@ -238,7 +238,7 @@ export class RestartController {
     this.firedAt = '';
     this.deadline = this.now() + this.delayMs;
     this.handle = this.setTimer(() => this.fire(), this.delayMs);
-    this.log(`restart planned in ${Math.round(this.delayMs / 1000)}s`);
+    this.log(`restart in ${Math.round(this.delayMs / 1000)}s`);
     void rotateLog(this.logPath);
     void note(this.logPath, `restart planned (pid ${process.pid}, ${this.delayMs}ms)`);
     return { ok: true, status: this.status() };
@@ -267,14 +267,14 @@ export class RestartController {
       const active = this.running();
       if (active > 0) {
         this.error = 'busy';
-        this.log(`restart cancelled at fire time: ${active} session(s) still running`);
+        this.log(`restart cancelled: ${active} session(s) still running`);
         void note(this.logPath, `restart cancelled: ${active} session(s) running`);
         return;
       }
       if (this.dryRun) {
         this.error = null;
         this.firedAt = new Date(this.now()).toISOString();
-        this.log('restart dry run: no relaunch, no exit');
+        this.log('restart dry run; nothing happened');
         void note(this.logPath, 'restart dry run (no relaunch, no exit)');
         return;
       }
@@ -283,18 +283,18 @@ export class RestartController {
         helperPid = this.relaunch();
       } catch (error) {
         this.error = 'relaunch-failed';
-        this.log(`restart aborted: relaunch helper failed (${error?.message ?? error})`);
+        this.log(`restart aborted: ${error?.message ?? error}`);
         void note(this.logPath, `relaunch helper failed: ${error?.message ?? error}`);
         return;
       }
       this.error = null;
       this.firedAt = new Date(this.now()).toISOString();
-      this.log(`restart firing: relaunch helper ${helperPid ?? 'spawned'}; asking the launcher to exit`);
+      this.log(`restarting (helper ${helperPid ?? 'unknown'})`);
       void note(this.logPath, `relaunch helper pid ${helperPid ?? 'unknown'}; exiting`);
       try {
         this.requestExit(0);
       } catch (error) {
-        this.log(`graceful exit request failed (${error?.message ?? error}); forcing process exit`);
+        this.log(`exit failed: ${error?.message ?? error}; forcing exit`);
         void note(this.logPath, `exit request failed: ${error?.message ?? error}`);
         setTimeout(() => process.exit(0), 1000).unref?.();
       }

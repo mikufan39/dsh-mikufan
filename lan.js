@@ -49,6 +49,15 @@ export const LAN_DEFAULT_MAX_CONNECTIONS = 0;
 export const LAN_MAX_CONNECTIONS_LIMIT = 256;
 /** Adapter names that never carry the home LAN (virtual machines, tunnels…). */
 const VIRTUAL_INTERFACE = /vethernet|wsl|docker|vmware|virtualbox|hyper-v|loopback|vbox|qemu|libvirt|tailscale|zerotier|\btap\b|\btun\b/i;
+/**
+ * How long a detected address list stays valid.
+ *
+ * `os.networkInterfaces()` costs about 5 ms on Windows and the panel asks for it
+ * on every LAN status read and every save; adapters do not change at that pace.
+ */
+const DETECT_CACHE_MS = 5_000;
+/** Last detection: `{ at, list }`, or null when nothing is cached. */
+let detectCache = null;
 
 /**
  * Whether an address literal requests every interface at once (never bind it).
@@ -61,9 +70,15 @@ export function isWildcardAddress(host) {
 
 /**
  * All private IPv4 addresses of this machine, virtual adapters skipped.
- * @returns address literals, home-router ranges (192.168) first.
+ *
+ * @param options - `{ fresh: true }` bypasses the short cache (binding a
+ *   listener must see an adapter that was plugged in a moment ago).
+ * @returns address literals, home-router ranges (192.168) first; a copy, so a
+ *   caller cannot mutate the cache.
  */
-export function detectPrivateIpv4List() {
+export function detectPrivateIpv4List({ fresh = false } = {}) {
+  const now = Date.now();
+  if (!fresh && detectCache !== null && now - detectCache.at < DETECT_CACHE_MS) return [...detectCache.list];
   const found = [];
   for (const [name, addresses] of Object.entries(os.networkInterfaces())) {
     if (VIRTUAL_INTERFACE.test(name)) continue;
@@ -81,7 +96,14 @@ export function detectPrivateIpv4List() {
   }
   const rank = (address) => (address.startsWith('192.168.') ? 0 : address.startsWith('10.') ? 1 : 2);
   found.sort((left, right) => rank(left) - rank(right));
-  return [...new Set(found)];
+  const list = [...new Set(found)];
+  detectCache = { at: now, list };
+  return [...list];
+}
+
+/** Drop the cached detection (tests, and a forced re-detect). */
+export function clearDetectedAddresses() {
+  detectCache = null;
 }
 
 /**
@@ -169,7 +191,7 @@ const lanWriteChains = new Map();
 let lanTempSeq = 0;
 
 /** Write one preference snapshot atomically. */
-async function writeLanPreferences(file, prefs, log) {
+async function writeLanPreferences(file, prefs) {
   const snapshot = {
     version: LAN_PREFERENCES_VERSION,
     lanAccessEnabled: prefs.lanAccessEnabled,
@@ -183,21 +205,21 @@ async function writeLanPreferences(file, prefs, log) {
   const temporary = `${file}.${process.pid}.${lanTempSeq}.tmp`;
   await writeFile(temporary, `${JSON.stringify(snapshot, null, 2)}\n`, 'utf8');
   await rename(temporary, file);
-  log(
-    `LAN preferences saved: lanAccessEnabled=${snapshot.lanAccessEnabled}, lanHost='${snapshot.lanHost}', lanPort=${snapshot.lanPort}, lanMaxConnections=${snapshot.lanMaxConnections}`,
-  );
 }
 
 /**
  * Persist the LAN preferences atomically (temp file + rename), serialized per
  * file, so overlapping saves cannot interleave.
+ *
+ * Saving is a routine panel action the page already reflects, so it prints
+ * nothing: the terminal reports the listener's state ({@link LanProxy}).
+ *
  * @param file - absolute path of the LAN preference file.
  * @param prefs - the full next preference values.
- * @param log - reporter.
  */
-export function saveLanPreferences(file, prefs, log) {
+export function saveLanPreferences(file, prefs) {
   const previous = lanWriteChains.get(file) ?? Promise.resolve();
-  const next = previous.then(() => writeLanPreferences(file, prefs, log));
+  const next = previous.then(() => writeLanPreferences(file, prefs));
   lanWriteChains.set(
     file,
     next.then(
@@ -234,7 +256,7 @@ export async function resetLanAccessOnStartup(file, legacyFile, log) {
   const saved = await readLanPreferences(file, legacyFile);
   if (saved.lanAccessEnabled !== true) return saved;
   const next = { ...saved, lanAccessEnabled: false };
-  await saveLanPreferences(file, next, () => {});
+  await saveLanPreferences(file, next);
   return next;
 }
 
@@ -327,12 +349,17 @@ export class LanProxy {
    */
   start({ lanHost, lanPort, maxConnections = 0, upstreamHost, upstreamPort, tokenUrlProvider }) {
     return new Promise((resolveStart) => {
-      const host = lanHost === '' || lanHost === undefined ? detectPrivateIpv4List()[0] : lanHost;
+      const host = lanHost === '' || lanHost === undefined ? detectPrivateIpv4List({ fresh: true })[0] : lanHost;
       if (host === undefined || host === '') {
         this.error = 'no LAN IPv4 address detected; pick one manually in the settings';
+        this.log(`LAN error: ${this.error}`);
         resolveStart(false);
         return;
       }
+      // The panel saves whenever a field loses focus, and every save restarts
+      // the listener. Report only a listener that really came up or moved, so
+      // an idle save stays silent in the terminal.
+      const previous = this.running ? { host: this.host, port: this.port } : null;
       void this.stop().then(() => {
         this.generation += 1;
         this.host = host;
@@ -354,7 +381,7 @@ export class LanProxy {
             error?.code === 'EADDRINUSE'
               ? `port ${this.port} is already in use`
               : String(error?.message ?? error);
-          this.log(`LAN proxy error: ${this.error}`);
+          this.log(`LAN error: ${this.error}`);
           try {
             server.close();
           } catch {}
@@ -363,7 +390,11 @@ export class LanProxy {
         });
         this.server = server;
         server.listen(lanPort, host, () => {
-          this.log(`LAN proxy listening on http://${urlHost(host)}:${lanPort} → ${this.upstreamAuthority}`);
+          // The bound port (a configured 0 in tests) is what a browser opens.
+          const bound = server.address()?.port ?? lanPort;
+          if (previous === null || previous.host !== host || previous.port !== lanPort) {
+            this.log(`LAN on: http://${urlHost(host)}:${bound}`);
+          }
           resolveStart(true);
         });
       });
@@ -475,7 +506,6 @@ export class LanProxy {
       const equals = pair.indexOf('=');
       if (equals <= 0) throw new Error('token exchange returned no session cookie');
       this.session = { name: pair.slice(0, equals).trim(), value: pair.slice(equals + 1).trim() };
-      this.log('upstream session minted for the LAN proxy');
     })()
       .catch((error) => {
         this.session = null;
@@ -562,15 +592,13 @@ export class LanProxy {
             .then(() => {
               const bodyless = req.method === 'GET' || req.method === 'HEAD' || req.method === 'OPTIONS';
               if (bodyless) {
-                this.log('upstream returned 401; session minted, retrying');
                 this.forwardRequest(req, res, 1);
                 return;
               }
-              this.log('upstream returned 401 on a bodied request; session minted for the next request');
               writeLanEnvelope(res, 503, undefined, { code: 'upstream-auth', message: 'session refreshed; please retry' });
             })
             .catch((error) => {
-              this.log(`session re-mint failed: ${error?.message ?? error}`);
+              this.log(`LAN sign-in failed: ${error?.message ?? error}`);
               writeLanEnvelope(res, 502, undefined, { code: 'upstream-auth', message: 'could not authenticate to the Harness listener' });
             });
           return;
@@ -616,7 +644,7 @@ export class LanProxy {
         try {
           await this.mintSession();
         } catch (error) {
-          this.log(`upgrade session mint failed: ${error?.message ?? error}`);
+          this.log(`LAN sign-in failed: ${error?.message ?? error}`);
           socket.destroy();
           return;
         }

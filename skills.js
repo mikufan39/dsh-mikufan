@@ -243,19 +243,18 @@ export async function ensureSkillsRoot(dshHome) {
 export async function installBundledSkill(sourceDir, root, name, log, markerFile) {
   const target = join(root, name);
   if (await pathExists(target)) {
-    await writeInstallMarker(markerFile, name).catch(() => {});
+    // Record the install once; a boot that finds the copy in place must not
+    // rewrite the marker (a temp file plus a rename for nothing).
+    await ensureInstallMarker(markerFile, name).catch(() => {});
     return false;
   }
   if (typeof markerFile === 'string' && markerFile !== '') {
     const marker = await readInstallMarker(markerFile);
-    if (marker[name] !== undefined) {
-      log(`bundled skill ${name} was installed before and is gone; leaving it removed`);
-      return false;
-    }
+    if (marker[name] !== undefined) return false;
   }
   await cp(sourceDir, target, { recursive: true, force: false, errorOnExist: false });
   await writeInstallMarker(markerFile, name).catch(() => {});
-  log(`installed bundled skill ${name} → ${target}`);
+  log(`installed bundled skill ${name}`);
   return true;
 }
 
@@ -284,7 +283,7 @@ const restoresInFlight = new Map();
 export async function restoreBundledSkill(sourceDir, root, name, log, markerFile) {
   const target = join(root, name);
   if (await pathExists(target)) {
-    await writeInstallMarker(markerFile, name).catch(() => {});
+    await ensureInstallMarker(markerFile, name).catch(() => {});
     return false;
   }
   // Two page opens (or two tabs) must not race into the same target.
@@ -304,7 +303,7 @@ export async function restoreBundledSkill(sourceDir, root, name, log, markerFile
         throw error;
       }
       await writeInstallMarker(markerFile, name).catch(() => {});
-      log(`restored bundled skill ${name} → ${target}`);
+      log(`restored bundled skill ${name}`);
       return true;
     } finally {
       restoresInFlight.delete(target);
@@ -334,6 +333,21 @@ async function writeInstallMarker(file, name) {
   const installed = await readInstallMarker(file);
   installed[name] = new Date().toISOString();
   await writeTextAtomic(file, `${JSON.stringify({ version: 1, installed }, null, 2)}\n`);
+}
+
+/**
+ * Record one bundled skill only when the marker does not already carry it.
+ *
+ * @param file - absolute path of the install-marker JSON.
+ * @param name - bundled skill name.
+ * @returns whether the marker was written.
+ */
+async function ensureInstallMarker(file, name) {
+  if (typeof file !== 'string' || file === '') return false;
+  const installed = await readInstallMarker(file);
+  if (installed[name] !== undefined) return false;
+  await writeInstallMarker(file, name);
+  return true;
 }
 
 /**
@@ -443,10 +457,9 @@ export async function readSkill(root, id) {
  * Create one skill as a directory bundle under the managed root.
  * @param root - managed skill root.
  * @param input - `{ name, description, body? }`.
- * @param log - reporter.
  * @returns the created entry.
  */
-export async function createSkill(root, input, log) {
+export async function createSkill(root, input) {
   const name = String(input?.name ?? '').trim().toLowerCase();
   if (!SKILL_NAME_PATTERN.test(name) || name.length > MAX_SKILL_NAME) {
     throw skillError('skill name must be kebab-case: lowercase letters, digits and single dashes', 'bad-name');
@@ -473,7 +486,6 @@ export async function createSkill(root, input, log) {
     '',
   ].join('\n');
   await writeTextAtomic(join(directory, SKILL_FILE_NAME), text);
-  log(`skill created via panel: ${name}`);
   return readSkill(root, name);
 }
 
@@ -482,16 +494,14 @@ export async function createSkill(root, input, log) {
  * @param root - managed skill root.
  * @param id - entry id.
  * @param enabled - desired state.
- * @param log - reporter.
  * @returns the updated entry, or null when the skill does not exist.
  */
-export async function setSkillEnabled(root, id, enabled, log) {
+export async function setSkillEnabled(root, id, enabled) {
   const file = await resolveSkillFile(root, id);
   if (file === null) return null;
   const text = await readFile(file, 'utf8');
   const next = setSkillEnabledInDocument(text, enabled === true);
   await writeTextAtomic(file, next);
-  log(`skill ${id} ${enabled === true ? 'enabled' : 'disabled'} via panel`);
   return readSkill(root, id);
 }
 
@@ -499,15 +509,13 @@ export async function setSkillEnabled(root, id, enabled, log) {
  * Remove one skill (its bundle directory, or its flat file).
  * @param root - managed skill root.
  * @param id - entry id.
- * @param log - reporter.
  * @returns whether something was removed.
  */
-export async function removeSkill(root, id, log) {
+export async function removeSkill(root, id) {
   const file = await resolveSkillFile(root, id);
   if (file === null) return false;
   const bundleDir = join(root, id);
   const isBundle = file === join(bundleDir, SKILL_FILE_NAME);
   await rm(isBundle ? bundleDir : file, { recursive: isBundle, force: true });
-  log(`skill removed via panel: ${id}`);
   return true;
 }

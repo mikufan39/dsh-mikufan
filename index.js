@@ -94,6 +94,7 @@ import {
   cleanLanHost,
   cleanLanMaxConnections,
   cleanLanPort,
+  clearDetectedAddresses,
   detectPrivateIpv4List,
   effectiveLanAccessEnabled,
   isWildcardAddress,
@@ -132,6 +133,15 @@ import {
 const PLUGIN_NAME = 'dsh-mikufan';
 /** Underlying web route prefix (the Client half fetches under the page base). */
 const ROUTE_PREFIX = '/mikufan/api';
+/**
+ * How long a startup with marked sessions waits before sweeping them.
+ *
+ * Listing the session corpus is the one startup step that grows with the user's
+ * history (≈0.5 ms per session), so it runs just after the boot burst instead of
+ * competing with the first render and the first request. A process that exits
+ * before the timer still keeps its marks, and the next start retries them.
+ */
+const SWEEP_DELAY_MS = 1500;
 /** Largest accepted request body for the mark endpoints. */
 const MAX_BODY_BYTES = 16 * 1024;
 /**
@@ -236,16 +246,15 @@ class DeleteSessionStore {
     try {
       text = await readFile(this.file, 'utf8');
     } catch (error) {
-      if (error?.code !== 'ENOENT') this.log(`state file unreadable (${error?.message ?? error}); starting empty`);
+      if (error?.code !== 'ENOENT') this.log(`delete-marks unreadable: ${error?.message ?? error}`);
       return;
     }
     try {
       const parsed = JSON.parse(text);
       const list = Array.isArray(parsed?.markedSessionIds) ? parsed.markedSessionIds : [];
       this.ids = new Set(list.filter(isSafeSessionId));
-      this.log(`loaded ${this.ids.size} session(s) marked for deletion`);
-    } catch (error) {
-      this.log(`state file is not valid JSON (${error?.message ?? error}); starting empty`);
+    } catch {
+      this.log('delete-marks not valid JSON; starting empty');
     }
   }
 
@@ -293,7 +302,7 @@ class DeleteSessionStore {
         await rename(temporary, this.file);
       })
       .catch((error) => {
-        this.log(`failed to save the marked set: ${error?.message ?? error}`);
+        this.log(`could not save delete marks: ${error?.message ?? error}`);
       });
     return this.writing;
   }
@@ -335,7 +344,7 @@ class PreferencesStore {
     try {
       text = readFileSync(this.file, 'utf8');
     } catch (error) {
-      if (error?.code !== 'ENOENT') this.log(`preferences unreadable (${error?.message ?? error}); using defaults`);
+      if (error?.code !== 'ENOENT') this.log(`preferences unreadable: ${error?.message ?? error}`);
       return;
     }
     try {
@@ -345,8 +354,8 @@ class PreferencesStore {
       }
       if (typeof parsed?.splashEnabled === 'boolean') this.values.splashEnabled = parsed.splashEnabled;
       if (typeof parsed?.memoryEnabled === 'boolean') this.values.memoryEnabled = parsed.memoryEnabled;
-    } catch (error) {
-      this.log(`preferences are not valid JSON (${error?.message ?? error}); using defaults`);
+    } catch {
+      this.log('preferences not valid JSON; using defaults');
     }
   }
 
@@ -401,7 +410,7 @@ class PreferencesStore {
         await rename(temporary, this.file);
       })
       .catch((error) => {
-        this.log(`failed to save preferences: ${error?.message ?? error}`);
+        this.log(`could not save preferences: ${error?.message ?? error}`);
       });
     return this.writing;
   }
@@ -499,7 +508,7 @@ async function forgetInWorkspaceRegistry(ctx, dshHome, id, log) {
         changed = true;
       }
     } catch (error) {
-      log(`registry domain update failed for ${id} (${error?.message ?? error}); the stale id stays in the file`);
+      log(`could not update the workspace list: ${error?.message ?? error}`);
       return 'none';
     }
     return changed ? 'domain' : 'none';
@@ -600,7 +609,7 @@ async function loadSubagentChildLinks(ctx, log) {
   try {
     records = await query.listSessions();
   } catch (error) {
-    log(`subagent cascade unavailable (sessionQuery listing failed: ${error?.message ?? error})`);
+    log(`subagent cleanup skipped: ${error?.message ?? error}`);
     return undefined;
   }
   if (!Array.isArray(records)) return undefined;
@@ -643,6 +652,30 @@ function collectDescendantIds(id, children) {
 }
 
 /**
+ * Print the one-line outcome of a startup sweep.
+ *
+ * The sweep can touch many sessions, and the panel already shows what the user
+ * marked: the terminal only needs the tally. Failures were reported one by one
+ * with their reason, so this line carries counts only and leaves zero out.
+ *
+ * @param log - reporter.
+ * @param outcome - per-session buckets from {@link sweepMarkedSessions}.
+ * @param counts - the `ignored` / `live` counters the buckets do not carry.
+ */
+function logSweepSummary(log, outcome, counts) {
+  const parts = [];
+  if (outcome.purged.length > 0) {
+    const subagents = outcome.cascade.length;
+    const suffix = subagents > 0 ? ` (+${subagents} subagent${subagents === 1 ? '' : 's'})` : '';
+    parts.push(`removed ${outcome.purged.length}${suffix}`);
+  }
+  if (counts.live > 0) parts.push(`${counts.live} still running`);
+  if (outcome.failed.length > 0) parts.push(`${outcome.failed.length} failed`);
+  if (counts.ignored > 0) parts.push(`${counts.ignored} ignored`);
+  if (parts.length > 0) log(`sessions: ${parts.join(', ')}`);
+}
+
+/**
  * Physically delete every marked session that is not live.
  *
  * A marked session that is really deleted takes its subagent sessions with it
@@ -662,59 +695,68 @@ function collectDescendantIds(id, children) {
  */
 async function sweepMarkedSessions({ ctx, dshHome, store, log }) {
   const outcome = { purged: [], skipped: [], failed: [], cascade: [] };
-  const children = await loadSubagentChildLinks(ctx, log);
+  /** Counters the outcome buckets do not carry, for the summary line. */
+  const counts = { ignored: 0, live: 0 };
+  /** Whether the durable marked set changed, so an idle sweep writes nothing. */
+  let changed = false;
+  /**
+   * Parent → children map, resolved at most once and only when a parent's log
+   * was really removed: building it lists the whole session corpus, which is the
+   * most expensive step of the sweep and is pure waste when nothing is deleted.
+   */
+  let children;
+  let childrenLoaded = false;
+  const childLinks = async () => {
+    if (!childrenLoaded) {
+      childrenLoaded = true;
+      children = await loadSubagentChildLinks(ctx, log);
+    }
+    return children;
+  };
   for (const id of store.list()) {
     if (!isSafeSessionId(id)) {
-      log(`dropping malformed session id from the marked set: ${JSON.stringify(id)}`);
-      store.remove(id);
+      counts.ignored += 1;
+      if (store.remove(id)) changed = true;
       continue;
     }
     try {
       if ((await isSessionLive(ctx, id)) === true) {
         outcome.skipped.push(id);
-        log(`skipped ${id}: the session is live in this process`);
+        counts.live += 1;
         continue;
       }
-      const logRemoved = await removeSessionLogDirectory(dshHome, id);
-      const cacheRemoved = await removeProjectionCache(dshHome, id);
-      const registry = await forgetInWorkspaceRegistry(ctx, dshHome, id, log);
-      store.remove(id);
+      await removeSessionLogDirectory(dshHome, id);
+      await removeProjectionCache(dshHome, id);
+      await forgetInWorkspaceRegistry(ctx, dshHome, id, log);
+      if (store.remove(id)) changed = true;
       outcome.purged.push(id);
-      log(
-        `deleted ${id} (log directory: ${logRemoved ? 'removed' : 'absent'}, projection cache: ${
-          cacheRemoved ? 'removed' : 'absent'
-        }, registry: ${registry})`,
-      );
-      if (children === undefined || !children.has(id)) continue;
-      for (const child of collectDescendantIds(id, children)) {
+      const links = await childLinks();
+      if (links === undefined || !links.has(id)) continue;
+      for (const child of collectDescendantIds(id, links)) {
         try {
           if ((await isSessionLive(ctx, child)) === true) {
-            store.add(child);
+            if (store.add(child)) changed = true;
             outcome.skipped.push(child);
-            log(`cascade kept ${child}: the subagent session is live; marked for the next startup`);
+            counts.live += 1;
             continue;
           }
-          const childLog = await removeSessionLogDirectory(dshHome, child);
-          const childCache = await removeProjectionCache(dshHome, child);
-          const childRegistry = await forgetInWorkspaceRegistry(ctx, dshHome, child, log);
+          await removeSessionLogDirectory(dshHome, child);
+          await removeProjectionCache(dshHome, child);
+          await forgetInWorkspaceRegistry(ctx, dshHome, child, log);
           outcome.cascade.push(child);
-          log(
-            `cascade deleted ${child} (log directory: ${childLog ? 'removed' : 'absent'}, projection cache: ${
-              childCache ? 'removed' : 'absent'
-            }, registry: ${childRegistry})`,
-          );
         } catch (error) {
-          store.add(child);
+          if (store.add(child)) changed = true;
           outcome.failed.push(child);
-          log(`failed to delete ${child} (subagent cascade): ${error?.message ?? error}`);
+          log(`could not remove ${child}: ${error?.message ?? error}`);
         }
       }
     } catch (error) {
       outcome.failed.push(id);
-      log(`failed to delete ${id}: ${error?.message ?? error}`);
+      log(`could not remove ${id}: ${error?.message ?? error}`);
     }
   }
-  await store.save();
+  if (changed) await store.save();
+  logSweepSummary(log, outcome, counts);
   return outcome;
 }
 
@@ -857,7 +899,6 @@ function createRouteHandler({ ctx, store, preferences, memory, lan, skillsRoot, 
           ...(typeof body?.type === 'string' ? { type: body.type } : {}),
           source: 'manual',
         });
-        log(`memory created via panel: ${entry.id}`);
         envelope(res, 200, { entry: publicEntry(entry) });
         return;
       }
@@ -877,13 +918,11 @@ function createRouteHandler({ ctx, store, preferences, memory, lan, skillsRoot, 
               ...(typeof body?.type === 'string' ? { type: body.type } : {}),
               ...(typeof body?.enabled === 'boolean' ? { enabled: body.enabled } : {}),
             });
-            log(`memory updated via panel: ${updated.id}`);
             envelope(res, 200, { entry: publicEntry(updated) });
             return;
           }
           if (req.method === 'DELETE') {
             await memory.remove(id);
-            log(`memory deleted via panel: ${id}`);
             envelope(res, 200, { deleted: true, id });
             return;
           }
@@ -936,12 +975,9 @@ function createRouteHandler({ ctx, store, preferences, memory, lan, skillsRoot, 
             try {
               preferences.onMemoryEnabledChange(body.memoryEnabled === true);
             } catch (error) {
-              log(`memory tools switch failed: ${error?.message ?? error}`);
+              log(`memory tools failed: ${error?.message ?? error}`);
             }
           }
-          if (deleteChanged) log(`delete-sessions ${body.deleteSessionsEnabled ? 'enabled' : 'disabled'}`);
-          if (splashChanged) log(`startup animation ${body.splashEnabled ? 'enabled' : 'disabled'}`);
-          if (memoryChanged) log(`local memory ${body.memoryEnabled ? 'enabled' : 'disabled'}`);
           envelope(res, 200, {
             deleteSessionsEnabled: preferences.deleteSessionsEnabled,
             splashEnabled: preferences.splashEnabled,
@@ -960,7 +996,6 @@ function createRouteHandler({ ctx, store, preferences, memory, lan, skillsRoot, 
         }
         const changed = action === 'mark' ? store.add(sessionId) : store.remove(sessionId);
         if (changed) await store.save();
-        log(`${action === 'mark' ? 'marked' : 'unmarked'} ${sessionId}`);
         envelope(res, 200, { ids: store.list(), changed });
         return;
       }
@@ -993,7 +1028,6 @@ function createRouteHandler({ ctx, store, preferences, memory, lan, skillsRoot, 
         }
         const body = await readJsonBody(req, MAX_AGENT_BODY_BYTES);
         const saved = await saveAgentInstructions(agentHome, body?.content);
-        log(`AGENTS.md ${saved.exists ? `saved (${saved.bytes} bytes)` : 'cleared'} via panel`);
         envelope(res, 200, { ...saved, saved: true });
         return;
       }
@@ -1010,7 +1044,6 @@ function createRouteHandler({ ctx, store, preferences, memory, lan, skillsRoot, 
         }
         const body = await readJsonBody(req, MAX_MCP_BODY_BYTES);
         const created = await mcp.create(body);
-        log(`MCP server created via panel: ${created.name} (${created.transport})`);
         envelope(res, 200, { server: publicServer(created), servers: (await mcp.list()).map(publicServer) });
         return;
       }
@@ -1026,14 +1059,12 @@ function createRouteHandler({ ctx, store, preferences, memory, lan, skillsRoot, 
               return;
             }
             const server = await mcp.setEnabled(name, body.enabled);
-            log(`MCP server ${name} ${body.enabled ? 'enabled' : 'disabled'} via panel`);
             envelope(res, 200, { server: publicServer(server) });
             return;
           }
           if (!isEnabled && req.method === 'PATCH') {
             const body = await readJsonBody(req, MAX_MCP_BODY_BYTES);
             const server = await mcp.update(name, body);
-            log(`MCP server updated via panel: ${name}${server.name === name ? '' : ` -> ${server.name}`}`);
             envelope(res, 200, { server: publicServer(server) });
             return;
           }
@@ -1043,7 +1074,6 @@ function createRouteHandler({ ctx, store, preferences, memory, lan, skillsRoot, 
               envelope(res, 404, undefined, { code: 'not-found', message: `no MCP server named ${name}` });
               return;
             }
-            log(`MCP server deleted via panel: ${name}`);
             // The disable-sync outcome rides along (`reloaded` / `absent` /
             // `failed` / `restart-required`) so the panel can warn about a
             // composition row it could not turn off.
@@ -1092,7 +1122,6 @@ function createRouteHandler({ ctx, store, preferences, memory, lan, skillsRoot, 
           });
           return;
         }
-        log('restart planned via panel');
         envelope(res, 200, restartStatusValue(planned.status));
         return;
       }
@@ -1167,7 +1196,7 @@ function createRouteHandler({ ctx, store, preferences, memory, lan, skillsRoot, 
               envelope(res, 400, undefined, { code: 'bad-preference', message: 'enabled must be a boolean' });
               return;
             }
-            const updated = await setSkillEnabled(skillsRoot, id, body.enabled, log);
+            const updated = await setSkillEnabled(skillsRoot, id, body.enabled);
             if (updated === null) {
               envelope(res, 404, undefined, { code: 'not-found', message: `no skill named ${id}` });
               return;
@@ -1176,7 +1205,7 @@ function createRouteHandler({ ctx, store, preferences, memory, lan, skillsRoot, 
             return;
           }
           if (req.method === 'DELETE') {
-            const removed = await removeSkill(skillsRoot, id, log);
+            const removed = await removeSkill(skillsRoot, id);
             if (!removed) {
               envelope(res, 404, undefined, { code: 'not-found', message: `no skill named ${id}` });
               return;
@@ -1188,11 +1217,13 @@ function createRouteHandler({ ctx, store, preferences, memory, lan, skillsRoot, 
       }
       envelope(res, 404, undefined, { code: 'not-found', message: `no route for ${req.method} ${pathname}` });
     } catch (error) {
-      log(`route ${action} failed: ${error?.message ?? error}`);
       // Skills rejections carry their own code: conflicts and bad input are
       // different failures for the panel, so they get different statuses.
       const code = typeof error?.code === 'string' && error.code !== '' ? error.code : 'bad-request';
       const status = code === 'exists' ? 409 : code === 'not-found' ? 404 : code === 'unavailable' ? 503 : 400;
+      // A rejected request is already explained in the panel; only a failure
+      // the user cannot act on (5xx) belongs in the terminal.
+      if (status >= 500) log(`${action} failed: ${error?.message ?? error}`);
       envelope(res, status, undefined, { code, message: String(error?.message ?? error) });
     }
   };
@@ -1207,17 +1238,16 @@ function createRouteHandler({ ctx, store, preferences, memory, lan, skillsRoot, 
  * cancels it. Every other event is ignored, and the fold is pure so it can be
  * verified without a live Session.
  *
- * @param options - store and reporter.
+ * @param options - store.
  * @param session - the Session the event was appended to (id is all we need).
  * @param event - the committed SessionEvent.
  * @returns whether a mark was cleared.
  */
-function clearMarkOnUserMessage({ store, log }, session, event) {
+function clearMarkOnUserMessage({ store }, session, event) {
   if (event?.type !== 'user/message') return false;
   const id = session?.id;
   if (typeof id !== 'string' || !store.has(id)) return false;
   store.remove(id);
-  log(`cleared the deletion mark for ${id}: the user continued the conversation`);
   void store.save();
   return true;
 }
@@ -1237,11 +1267,11 @@ export function revealInFileManager(target, log) {
         : process.platform === 'darwin'
           ? spawn('open', ['-R', target], { detached: true, stdio: 'ignore' })
           : spawn('xdg-open', [dirname(target)], { detached: true, stdio: 'ignore' });
-    child.on('error', (error) => log(`could not reveal ${target}: ${error?.message ?? error}`));
+    child.on('error', (error) => log(`could not open the file manager: ${error?.message ?? error}`));
     child.unref();
     return true;
   } catch (error) {
-    log(`could not reveal ${target}: ${error?.message ?? error}`);
+    log(`could not open the file manager: ${error?.message ?? error}`);
     return false;
   }
 }
@@ -1290,24 +1320,23 @@ export async function applyMcpEnabled(ctx, server, log) {
   try {
     row = (await manager.listPlugins()).find((item) => item.entryId === entryId);
   } catch (error) {
-    log(`MCP sync: listing plugins failed: ${error?.message ?? error}`);
+    log(`MCP sync failed: ${error?.message ?? error}`);
     throw new Error(`listing plugins failed: ${error?.message ?? error}`);
   }
   if (row === undefined || row.readOnlyReason !== undefined) {
-    if (row !== undefined) log(`MCP sync: ${entryId} is not addressable (${row.readOnlyReason})`);
+    if (row !== undefined) log(`MCP ${server.name} not applied: ${row.readOnlyReason}`);
     return 'absent';
   }
   if ((row.enabled ?? true) === enabled) return 'reloaded';
   try {
     const outcome = await manager.setPluginEnabled(entryId, enabled);
     if (outcome?.restartReason !== undefined) {
-      log(`MCP sync: ${entryId} ${enabled ? 'enabled' : 'disabled'} but needs a restart: ${outcome.restartReason}`);
+      log(`MCP ${server.name}: restart needed (${outcome.restartReason})`);
       return 'restart-required';
     }
-    log(`MCP sync: ${entryId} ${enabled ? 'enabled' : 'disabled'} in the running composition`);
     return 'reloaded';
   } catch (error) {
-    log(`MCP sync: ${entryId} could not be ${enabled ? 'enabled' : 'disabled'}: ${error?.message ?? error}`);
+    log(`MCP ${server.name} failed: ${error?.message ?? error}`);
     throw error;
   }
 }
@@ -1371,9 +1400,9 @@ export function apply(ctx) {
   ctx.effect(() => () => restart.dispose(), `${PLUGIN_NAME}: restart countdown`);
   void memory.load();
   log(
-    `features: delete-sessions=${preferences.deleteSessionsEnabled ? 'on' : 'off'}, ` +
-      `startup-animation=${preferences.splashEnabled ? 'on' : 'off'}, ` +
-      `local-memory=${preferences.memoryEnabled ? 'on' : 'off'}`,
+    `ready: delete-sessions ${preferences.deleteSessionsEnabled ? 'on' : 'off'}, ` +
+      `startup-animation ${preferences.splashEnabled ? 'on' : 'off'}, ` +
+      `memory ${preferences.memoryEnabled ? 'on' : 'off'}`,
   );
 
   // Skills: the Harness ships no skills folder. Create the user root the
@@ -1385,16 +1414,15 @@ export function apply(ctx) {
       try {
         await ensureSkillsRoot(dshHome);
         if (disposed) return;
-        const installed = await installBundledSkill(
+        await installBundledSkill(
           bundledSkillDirectory(),
           skillsRoot,
           'skill-creator',
           log,
           bundledMarkerFile,
         );
-        log(`skills root ready: ${skillsRoot}${installed ? ' (skill-creator installed)' : ''}`);
       } catch (error) {
-        log(`skills root setup failed: ${error?.message ?? error}`);
+        log(`skills setup failed: ${error?.message ?? error}`);
       }
     })();
     return () => {
@@ -1423,7 +1451,7 @@ export function apply(ctx) {
   let memoryToolsDispose = null;
   const registerOrReleaseMemoryTools = (enabled) => {
     if (enabled && memoryToolsDispose === null) {
-      const disposers = createMemoryTools(memory, log).map((definition) => {
+      const disposers = createMemoryTools(memory).map((definition) => {
         try {
           return ctx.get('tools')?.register(definition);
         } catch {
@@ -1451,7 +1479,7 @@ export function apply(ctx) {
   ctx.inject(['tools'], (scoped) => {
     if (preferences.memoryEnabled !== true) return undefined;
     memoryToolsDispose = null; // the inject body owns the lifecycle now
-    const disposers = createMemoryTools(memory, log).map((definition) => scoped.tools.register(definition));
+    const disposers = createMemoryTools(memory).map((definition) => scoped.tools.register(definition));
     memoryToolsDispose = () => {
       for (const dispose of disposers) dispose();
     };
@@ -1493,40 +1521,48 @@ export function apply(ctx) {
 
   ctx.effect(() => {
     let disposed = false;
+    /** Pending deferred sweep, cleared when the plugin unloads. */
+    let timer = null;
     // Claim the one sweep of this process before any await, so a reload racing
     // the boot cannot run it twice.
     const claimed = globalThis[STARTUP_SWEEP_CLAIM] !== true;
     if (claimed) globalThis[STARTUP_SWEEP_CLAIM] = true;
-    void (async () => {
-      await store.load();
+    /** Delete the marked sessions once the boot burst is over. */
+    const sweep = async () => {
+      timer = null;
       if (disposed) return;
-      if (!claimed) {
-        log(`${store.list().length} mark(s) loaded; this process already ran its startup sweep`);
-        return;
-      }
-      if (preferences.deleteSessionsEnabled !== true) {
-        log(`${store.list().length} mark(s) loaded; delete-sessions is off, skipping the startup sweep`);
-        return;
-      }
       try {
-        const outcome = await sweepMarkedSessions({ ctx, dshHome, store, log });
-        if (outcome.cascade.length > 0) {
-          log(`startup sweep cascade-deleted ${outcome.cascade.length} subagent session(s)`);
-        }
-        if (outcome.purged.length > 0) log(`startup sweep deleted ${outcome.purged.length} session(s)`);
-        if (outcome.failed.length > 0) log(`${outcome.failed.length} session(s) stayed marked for the next startup`);
+        await sweepMarkedSessions({ ctx, dshHome, store, log });
       } catch (error) {
         log(`startup sweep failed: ${error?.message ?? error}`);
       }
+    };
+    void (async () => {
+      await store.load();
+      if (disposed) return;
+      if (!claimed) return;
+      if (preferences.deleteSessionsEnabled !== true) {
+        const pending = store.list().length;
+        if (pending > 0) log(`${pending} marked session(s) pending (delete-sessions off)`);
+        return;
+      }
+      // Nothing marked: the sweep would only list the corpus, write the same
+      // file back and print nothing, so it never starts.
+      if (store.list().length === 0) return;
+      // The listing scales with the user's history; run it just after the boot
+      // burst instead of competing with it. An earlier exit retries next start.
+      timer = setTimeout(() => void sweep(), SWEEP_DELAY_MS);
+      timer.unref?.();
     })();
     return () => {
       disposed = true;
+      if (timer !== null) clearTimeout(timer);
     };
   }, `${PLUGIN_NAME}: startup sweep`);
 
   // A continued conversation cancels the pending deletion, whoever started it.
   ctx.effect(
-    () => ctx.on('session/event', (session, event) => clearMarkOnUserMessage({ store, log }, session, event)),
+    () => ctx.on('session/event', (session, event) => clearMarkOnUserMessage({ store }, session, event)),
     `${PLUGIN_NAME}: continued-conversation release`,
   );
 
@@ -1565,8 +1601,10 @@ export function apply(ctx) {
     const lanApply = async () => {
       const saved = await readLanPreferences(lanPreferencesFile, lanLegacyPreferencesFile);
       if (!effectiveLanAccessEnabled(saved, lanSwitchOnThisRun)) {
+        // Silently idle saves: only a listener that really was up reports the stop.
+        const wasRunning = lanProxy.running;
         await lanProxy.stop();
-        log('LAN proxy stopped (switch off); the main listener stays loopback-only');
+        if (wasRunning) log('LAN off');
         return saved;
       }
       const { host, port } = lanUpstream();
@@ -1578,7 +1616,6 @@ export function apply(ctx) {
         upstreamPort: port,
         tokenUrlProvider: lanTokenUrlProvider,
       });
-      if (lanProxy.error !== undefined) log(`LAN proxy not running: ${lanProxy.error}`);
       return saved;
     };
     /** Current LAN facts for the status endpoint. */
@@ -1656,7 +1693,7 @@ export function apply(ctx) {
         next.lanAccessEnabled = body.lanAccessEnabled;
         lanSwitchOnThisRun = next.lanAccessEnabled === true;
       }
-      await saveLanPreferences(lanPreferencesFile, next, log);
+      await saveLanPreferences(lanPreferencesFile, next);
       await lanApply();
       return lanStatusValue();
     };
@@ -1685,7 +1722,7 @@ export function apply(ctx) {
           try {
             await resetLanAccessOnStartup(lanPreferencesFile, lanLegacyPreferencesFile, log);
           } catch (error) {
-            log(`LAN startup reset failed: ${error?.message ?? error}`);
+            log(`LAN reset failed: ${error?.message ?? error}`);
           }
         })();
         return () => {
@@ -1756,6 +1793,7 @@ export const __internal = {
     cleanLanHost,
     cleanLanMaxConnections,
     cleanLanPort,
+    clearDetectedAddresses,
     detectPrivateIpv4List,
     effectiveLanAccessEnabled,
     isWildcardAddress,

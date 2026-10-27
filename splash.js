@@ -239,7 +239,7 @@ export function createSplashRouteHandler({ ctx, log }) {
     try {
       asset = await readSplashAsset();
     } catch (error) {
-      log(`failed to read the splash asset: ${error?.message ?? error}`);
+      log(`splash asset unreadable: ${error?.message ?? error}`);
       res.writeHead(500, { 'content-type': 'text/plain; charset=utf-8' });
       res.end('splash asset unavailable');
       return;

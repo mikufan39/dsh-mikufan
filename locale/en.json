@@ -1,6 +1,6 @@
 {
   "meta": {
     "title": "MAGICAL MIRAI",
-    "description": "MAGICAL MIRAI adds and sharpens seven features for DSH: delete sessions (subagent sessions included) on the next startup, a startup animation, local long-term memory, LAN access that stays off every launch until you enable it, a Skills manager with a bundled skill-creator, an Agent editor for your global ~/.dsh/AGENTS.md, and an MCP server manager in the ChatGPT/Codex format. Everything is managed from the sidebar Control panel."
+    "description": "MAGICAL MIRAI adds and sharpens eight features for DSH: delete sessions (subagent sessions included) on the next startup, a startup animation, local long-term memory, LAN access that stays off every launch until you enable it, a Skills manager with a bundled skill-creator, an Agent editor for your global ~/.dsh/AGENTS.md, an MCP server manager in the ChatGPT/Codex format, and a one-click restart that counts down six seconds and refuses while sessions are running. Everything is managed from the sidebar MAGICAL MIRAI control panel."
   }
 }

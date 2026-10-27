@@ -1,7 +1,9 @@
 # dsh-mikufan bundle patch.
-# One Host row: the startup purge of sessions marked for deletion, the HTTP
-# endpoints the sidebar UI uses to mark/unmark/read those sessions, and the
-# Startup-animation cover (index injection + /mikufan/splash + preference routes).
+# One Host row (id/name must stay `dsh-mikufan`): session cleanup for marked
+# sessions, the control panel's HTTP endpoints, the startup-animation cover and
+# its route, local memory tools + prompt index, the LAN proxy, the managed
+# skills root, the global AGENTS.md editor, the MCP server store with
+# composition sync, and the one-click restart engine.
 - insert:
     - id: dsh-mikufan
       name: dsh-mikufan

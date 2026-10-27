@@ -133,7 +133,7 @@ export class MemoryStore {
       const { readFile } = await import('node:fs/promises');
       text = await readFile(this.file, 'utf8');
     } catch (error) {
-      if (error?.code !== 'ENOENT') this.log(`memory file unreadable (${error?.message ?? error}); starting empty`);
+      if (error?.code !== 'ENOENT') this.log(`memory unreadable: ${error?.message ?? error}`);
       return;
     }
     try {
@@ -146,9 +146,8 @@ export class MemoryStore {
           typeof entry.id === 'string' &&
           typeof entry.content === 'string',
       );
-      this.log(`loaded ${this.entries.length} memor${this.entries.length === 1 ? 'y' : 'ies'}`);
-    } catch (error) {
-      this.log(`memory file is not valid JSON (${error?.message ?? error}); starting empty`);
+    } catch {
+      this.log('memory not valid JSON; starting empty');
     }
   }
 
@@ -293,7 +292,7 @@ export class MemoryStore {
         await rename(temporary, this.file);
       })
       .catch((error) => {
-        this.log(`failed to save memories: ${error?.message ?? error}`);
+        this.log(`could not save memory: ${error?.message ?? error}`);
       });
     return this.writing;
   }
@@ -309,10 +308,9 @@ export class MemoryStore {
  * honest.
  *
  * @param store - the memory store.
- * @param log - reporter.
  * @returns the tool definitions.
  */
-export function createMemoryTools(store, log = createLog()) {
+export function createMemoryTools(store) {
   const similarOf = (content) =>
     store
       .list()
@@ -402,7 +400,6 @@ export function createMemoryTools(store, log = createLog()) {
           const updated = await store.update(id, { content, ...(type !== undefined ? { type } : {}) });
           if (updated === undefined) {
             const created = await store.create({ content, ...(type !== undefined ? { type } : {}) });
-            log(`memory written by agent (requested id was unknown): ${created.id}`);
             return {
               action: 'created',
               id: created.id,
@@ -411,11 +408,9 @@ export function createMemoryTools(store, log = createLog()) {
               hint: `The requested id was unknown, so the fact was saved as a new entry.`,
             };
           }
-          log(`memory updated by agent: ${updated.id}`);
           return { action: 'updated', id: updated.id, content: updated.content, similar };
         }
         const created = await store.create({ content, ...(type !== undefined ? { type } : {}) });
-        log(`memory written by agent: ${created.id}`);
         return { action: 'created', id: created.id, content: created.content, similar };
       },
     }),
@@ -584,7 +579,6 @@ export function createMemoryTools(store, log = createLog()) {
       async execute(args) {
         const id = typeof args?.id === 'string' ? args.id : '';
         const deleted = id !== '' ? await store.remove(id) : false;
-        if (deleted) log(`memory deleted by agent: ${id}`);
         return { deleted, id };
       },
     }),

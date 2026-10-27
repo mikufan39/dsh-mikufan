@@ -1,9 +1,28 @@
 {
   "name": "dsh-mikufan",
-  "version": "1.0.6",
+  "version": "1.1.0",
   "private": true,
   "license": "MIT",
-  "description": "魔法未来为dsh增加/强化了几个功能：删除会话、启动动画、记忆、局域网访问、Skills管理、Agent自定义和MCP管理。",
+  "description": "魔法未来为dsh增加/强化了几个功能：删除会话、启动动画、记忆、局域网访问、Skills管理、Agent自定义、MCP管理和一键重启。",
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "plugin",
+    "bundle",
+    "skills",
+    "mcp",
+    "memory",
+    "lan"
+  ],
+  "author": "mikufan39",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mikufan39/dsh-mikufan.git"
+  },
+  "homepage": "https://github.com/mikufan39/dsh-mikufan#readme",
+  "bugs": {
+    "url": "https://github.com/mikufan39/dsh-mikufan/issues"
+  },
   "type": "module",
   "icon": "./icon.jpg",
   "exports": {
@@ -34,7 +53,8 @@
     "splash/index.html",
     "splash/embed-bridge.html",
     "locale/*.json",
-    "icon.jpg"
+    "icon.jpg",
+    "control-panel.png"
   ],
   "dsh": {
     "bundle": {
