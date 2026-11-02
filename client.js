@@ -259,6 +259,9 @@ window.__ModuleLoader__.load({
         'mcp.applied.reloaded': '已同步到运行中的 Harness（立即生效）。',
         'mcp.applied.failed': '已写入 mcp.json，但同步到运行中的 Harness 失败：{message}',
         'mcp.applied.restart': '已写入 mcp.json；该条目需要重启 Harness 才能生效。',
+        'mcp.applied.absent': '已写入 mcp.json；运行中的 Harness 没有接管这个条目（组合里没有 mcp-{name}，或本 profile 不由插件管理器管理），这次开关没有改变运行状态。',
+        'mcp.applied.overridden': '已写入 mcp.json；但有更高优先级的 patch 覆盖着这个条目，开关暂时不会生效（要改那一层 patch 才会跟随）。',
+        'mcp.applied.unknown': '开关返回了无法识别的结果：{value}（面板可能与 Host 版本不一致）。',
         'mcp.edit': '编辑',
         'mcp.details': '详情',
         'mcp.delete': '删除',
@@ -304,6 +307,8 @@ window.__ModuleLoader__.load({
         'mcp.deleteFailed': '删除失败：{message}',
         'mcp.delete.appliedFailed': '已删除，但没能停用组合里的 mcp-{name} 条目（它可能仍在运行）：{message}',
         'mcp.delete.appliedRestart': '已删除；组合里的 mcp-{name} 条目需要重启 Harness 才会停止。',
+        'mcp.delete.appliedAbsent': '已删除；运行中的 Harness 没有接管这个条目（组合里没有 mcp-{name}，或本 profile 不由插件管理器管理）。',
+        'mcp.delete.appliedOverridden': '已删除；但有更高优先级的 patch 覆盖着 mcp-{name}，它可能仍在运行（要改那一层 patch）。',
         'memory.tab.title': '记忆',
         'memory.tab.subtitle': 'Agent 跨会话记住的持久事实，纯本地存储。',
         'memory.offNotice': '长期记忆功能当前已关闭，可在「MAGICAL MIRAI」页开启。',
@@ -507,6 +512,9 @@ window.__ModuleLoader__.load({
         'mcp.applied.reloaded': 'Synced into the running Harness (effective immediately).',
         'mcp.applied.failed': 'Written to mcp.json, but syncing into the running Harness failed: {message}',
         'mcp.applied.restart': 'Written to mcp.json; this entry needs a Harness restart to take effect.',
+        'mcp.applied.absent': 'Written to mcp.json; the running Harness did not take this switch over (no mcp-{name} entry in the composition, or this profile is not managed by the plugin manager), so nothing changed at runtime.',
+        'mcp.applied.overridden': 'Written to mcp.json, but a higher-priority patch overrides this entry, so the switch does not take effect (that layer has to change).',
+        'mcp.applied.unknown': 'The switch returned a result this panel does not know: {value} (the panel may be out of step with the Host).',
         'mcp.edit': 'Edit',
         'mcp.details': 'Details',
         'mcp.delete': 'Remove',
@@ -552,6 +560,8 @@ window.__ModuleLoader__.load({
         'mcp.deleteFailed': 'Delete failed: {message}',
         'mcp.delete.appliedFailed': 'Deleted, but the mcp-{name} composition entry could not be turned off (it may still be running): {message}',
         'mcp.delete.appliedRestart': 'Deleted; the mcp-{name} composition entry needs a Harness restart to stop.',
+        'mcp.delete.appliedAbsent': 'Deleted; the running Harness never took this entry over (no mcp-{name} entry in the composition, or this profile is not managed by the plugin manager).',
+        'mcp.delete.appliedOverridden': 'Deleted; a higher-priority patch still overrides mcp-{name}, so it may keep running (that layer has to change).',
         'memory.tab.title': 'Memory',
         'memory.tab.subtitle': 'Durable facts the agent remembers across sessions, stored locally.',
         'memory.offNotice': 'Long-term memory is currently off. Enable it on the MAGICAL MIRAI page.',
@@ -1648,6 +1658,25 @@ window.__ModuleLoader__.load({
       if (server?.applied === 'restart-required') {
         return translate('mcp.applied.restart', '已写入 mcp.json；该条目需要重启 Harness 才能生效。');
       }
+      if (server?.applied === 'overridden') {
+        return translate(
+          'mcp.applied.overridden',
+          '已写入 mcp.json；但有更高优先级的 patch 覆盖着这个条目，开关暂时不会生效（要改那一层 patch 才会跟随）。',
+        );
+      }
+      // Anything else this panel does not know (a newer Host, a renamed verdict)
+      // must not fall through to silence: silence is what made the original bug
+      // invisible. 'reloaded' and 'absent' have their own lines below.
+      if (
+        typeof server?.applied === 'string' &&
+        server.applied !== '' &&
+        server.applied !== 'reloaded' &&
+        server.applied !== 'absent'
+      ) {
+        return formatTemplate(translate('mcp.applied.unknown', '开关返回了无法识别的结果：{value}（面板可能与 Host 版本不一致）。'), {
+          value: server.applied,
+        });
+      }
       return '';
     }
 
@@ -1677,6 +1706,31 @@ window.__ModuleLoader__.load({
         } else if (value?.applied === 'restart-required') {
           setMcpNotice(
             formatTemplate(translate('mcp.delete.appliedRestart', '已删除；组合里的 mcp-{name} 条目需要重启 Harness 才会停止。'), { name }),
+          );
+        } else if (value?.applied === 'overridden') {
+          // The row exists but a higher-priority layer keeps it on: the record
+          // is gone and the entry may well still be running.
+          setMcpNotice(
+            formatTemplate(
+              translate(
+                'mcp.delete.appliedOverridden',
+                '已删除；但有更高优先级的 patch 覆盖着 mcp-{name}，它可能仍在运行（要改那一层 patch）。',
+              ),
+              { name },
+            ),
+          );
+        } else if (value?.applied === 'absent') {
+          // Nothing in the running composition owned the name (or this profile
+          // is not managed): the record is gone and no row was switched off.
+          // Saying so beats the old silence, which read as "fully stopped".
+          setMcpNotice(
+            formatTemplate(
+              translate(
+                'mcp.delete.appliedAbsent',
+                '已删除；运行中的 Harness 没有接管这个条目（组合里没有 mcp-{name}，或本 profile 不由插件管理器管理）。',
+              ),
+              { name },
+            ),
           );
         }
         return value;
@@ -3487,6 +3541,7 @@ window.__ModuleLoader__.load({
 .MikufanMcpNoticeClose:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:1px}
 .MikufanMcpNoticeClose svg{width:12px;height:12px}
 .MikufanMcpAppliedLine{margin:-4px 0 0;font-size:12px;line-height:18px;color:var(--dsw-alias-state-success-primary,var(--dsw-alias-label-secondary))}
+.MikufanMcpNoteLine{margin:-4px 0 0;font-size:12px;line-height:18px;color:var(--dsw-alias-label-secondary)}
 /* Dialog: the memory dialog's overlay idiom, two columns wide for the fields. */
 .MikufanMcpMask{position:fixed;inset:0;z-index:1010;display:flex;align-items:center;justify-content:center;padding:24px;background:var(--dsw-alias-bg-mask-1);backdrop-filter:var(--dsw-mask-blur,blur(4px));-webkit-backdrop-filter:var(--dsw-mask-blur,blur(4px));animation:MikufanMemFade .16s ease-out}
 .MikufanMcpDialog{display:flex;flex-direction:column;gap:14px;box-sizing:border-box;width:min(620px,100%);max-height:min(84vh,760px);overflow:auto;padding:18px 20px 16px;border:0;border-radius:var(--dsw-radius-panel);background:var(--dsw-alias-bg-layer-2);box-shadow:var(--dsw-elevation-prominent,0 18px 48px rgba(0,0,0,.22));animation:MikufanMemPop .16s ease-out}
@@ -3741,7 +3796,19 @@ window.__ModuleLoader__.load({
           ? h('div', { className: 'MikufanMcpErrorLine', role: 'alert' }, appliedNotice)
           : applied === 'reloaded'
             ? h('div', { className: 'MikufanMcpAppliedLine', role: 'status' }, translate('mcp.applied.reloaded', '已同步到运行中的 Harness（立即生效）。'))
-            : null,
+            : applied === 'absent'
+              ? h(
+                  'div',
+                  { className: 'MikufanMcpNoteLine', role: 'status' },
+                  formatTemplate(
+                    translate(
+                      'mcp.applied.absent',
+                      '已写入 mcp.json；运行中的 Harness 没有接管这个条目（组合里没有 mcp-{name}，或本 profile 不由插件管理器管理），这次开关没有改变运行状态。',
+                    ),
+                    { name: server.name },
+                  ),
+                )
+              : null,
       );
     }
 

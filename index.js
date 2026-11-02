@@ -1282,6 +1282,45 @@ export function bundledSkillDirectory() {
 }
 
 /**
+ * Composition entry ids one `mcp-<name>` patch row may answer to.
+ *
+ * The Loader namespaces a child entry under the entry that owns it — its
+ * `Entry.id` is the parent entry id, `EntryTree.sep`, then the declared id —
+ * and the Harness mounts the whole profile patch under one root `include`
+ * entry. A row pasted into `cordis.patch.yml` as `id: mcp-<name>` is therefore
+ * the Loader entry `include:mcp-<name>`, while `PluginInfo.patchId` keeps the
+ * bare row id. Matching only the bare id is what made the panel switch a
+ * silent no-op.
+ *
+ * @param rowId - the bare patch row id (`mcp-<name>`).
+ * @returns the ids such a row may carry, most specific first.
+ */
+function mcpEntryIds(rowId) {
+  return [`include:${rowId}`, rowId];
+}
+
+/**
+ * Find the composition row that runs `mcp-<name>`.
+ *
+ * `patchId` is authoritative — the manager only sets it on a row it is willing
+ * to address — then the Loader entry id is compared with the composition
+ * namespace, and a suffix match covers a row nested one include deeper.
+ *
+ * @param rows - `pluginManager.listPlugins()` output.
+ * @param rowId - the bare patch row id (`mcp-<name>`).
+ * @returns the matching row, or `undefined` when nothing in the composition owns it.
+ */
+function findMcpRow(rows, rowId) {
+  const addressed = rows.find((item) => item.patchId === rowId);
+  if (addressed !== undefined) return addressed;
+  for (const entryId of mcpEntryIds(rowId)) {
+    const exact = rows.find((item) => item.entryId === entryId);
+    if (exact !== undefined) return exact;
+  }
+  return rows.find((item) => typeof item.entryId === 'string' && item.entryId.endsWith(`:${rowId}`));
+}
+
+/**
  * Push one MCP server's `enabled` flag into the running Harness composition.
  *
  * The MCP page owns the Codex-standard document (`mcp.json`); a harness or
@@ -1291,21 +1330,28 @@ export function bundledSkillDirectory() {
  * that entry's `disabled` through the plugin manager and reloads it, so the
  * panel switch takes effect immediately instead of on the next restart.
  *
- * Outcomes of the bridge (never thrown — the document write already succeeded):
- * - `'reloaded'`: the composition entry was found and reloaded.
- * - `'absent'`: no composition entry with `mcp-<name>` exists (or the plugin
- *   manager is not loaded) — only the document changed, effective next paste/
- *   restart. The expected state for a server that was never wired in.
- * - `'failed'`: the manager rejected the change (protected entry, concurrent
- *   edit, …); the message lands on the record's `applyError` for the panel.
+ * Outcomes of the bridge (the document write already succeeded either way; a
+ * throw is what the engine records as `applied: 'failed'`):
+ * - `'reloaded'`: the composition entry was found and now follows the flag.
+ * - `'absent'`: no composition entry owns `mcp-<name>` (or the plugin manager
+ *   is not loaded) — only the document changed, effective next paste/restart.
+ *   The expected state for a server that was never wired in; the panel says so
+ *   instead of pretending the switch worked.
+ * - `'restart-required'`: the manager saved the switch but a restart decides
+ *   when it runs.
+ * - `'overridden'`: the switch was saved in the profile, but a higher-priority
+ *   patch (home patch, launch overlay, bundle layer) forces the opposite value,
+ *   so the running composition keeps ignoring it.
+ * - thrown: the manager refused the change (protected or unaddressable entry,
+ *   concurrent edit, …); the message lands on the record's `applyError`.
  *
  * @param ctx - owning Cordis context.
  * @param server - the persisted server record (name + enabled).
  * @param log - reporter.
- * @returns `'reloaded'`, `'absent'`, or `'failed'` (rejected with `applyError`).
+ * @returns `'reloaded'`, `'absent'`, `'restart-required'`, or `'overridden'`.
  */
 export async function applyMcpEnabled(ctx, server, log) {
-  const entryId = `mcp-${server.name}`;
+  const rowId = `mcp-${server.name}`;
   const enabled = server.enabled === true;
   let manager;
   try {
@@ -1316,29 +1362,56 @@ export async function applyMcpEnabled(ctx, server, log) {
   if (manager === undefined || typeof manager.setPluginEnabled !== 'function' || typeof manager.listPlugins !== 'function') {
     return 'absent';
   }
-  let row;
+  let rows;
   try {
-    row = (await manager.listPlugins()).find((item) => item.entryId === entryId);
+    rows = await manager.listPlugins();
   } catch (error) {
     log(`MCP sync failed: ${error?.message ?? error}`);
     throw new Error(`listing plugins failed: ${error?.message ?? error}`);
   }
-  if (row === undefined || row.readOnlyReason !== undefined) {
-    if (row !== undefined) log(`MCP ${server.name} not applied: ${row.readOnlyReason}`);
-    return 'absent';
+  const row = findMcpRow(rows, rowId);
+  if (row === undefined) return 'absent';
+  if (row.readOnlyReason !== undefined) {
+    // The composition does own this server but refuses to be driven from the
+    // profile patch (protected module, row outside the patch layer, …). Silence
+    // is the one answer that must not happen here: report it as a real failure.
+    log(`MCP ${server.name} not applied: ${row.readOnlyReason}`);
+    throw new Error(`the composition entry for mcp-${server.name} cannot be switched (${row.readOnlyReason})`);
   }
   if ((row.enabled ?? true) === enabled) return 'reloaded';
+  // `setPluginEnabled` addresses a row by its Loader entry id (what listPlugins
+  // returned), not by the bare patch row id.
+  const entryId = typeof row.entryId === 'string' && row.entryId !== '' ? row.entryId : rowId;
+  let outcome;
   try {
-    const outcome = await manager.setPluginEnabled(entryId, enabled);
-    if (outcome?.restartReason !== undefined) {
-      log(`MCP ${server.name}: restart needed (${outcome.restartReason})`);
-      return 'restart-required';
-    }
-    return 'reloaded';
+    outcome = await manager.setPluginEnabled(entryId, enabled);
   } catch (error) {
     log(`MCP ${server.name} failed: ${error?.message ?? error}`);
     throw error;
   }
+  // `pluginManager.change()` never throws: it reports what happened on the
+  // ChangeResult. Only `applied` means the running composition followed the
+  // flag — reading an absent `restartReason` as success is how a refused switch
+  // used to be reported as 'reloaded'.
+  const application = outcome?.application;
+  if (application === 'failed' || application === 'cancelled') {
+    const message = outcome?.error?.message ?? outcome?.error?.code ?? `the plugin manager reported ${application}`;
+    log(`MCP ${server.name} failed: ${message}`);
+    throw new Error(message);
+  }
+  if (application === 'overridden') {
+    // Saved, but a higher-priority layer keeps the opposite value: a restart
+    // would not change a thing, so this must not borrow the restart wording.
+    log(`MCP ${server.name}: a higher-priority patch overrides the switch`);
+    return 'overridden';
+  }
+  if (application === 'applied') return 'reloaded';
+  // Every other verdict — 'restart-required', one a future manager adds, or no
+  // verdict at all — means "saved, not running yet". Only an explicit 'applied'
+  // may read as success; assuming it is how a refused switch used to masquerade
+  // as 'reloaded'.
+  log(`MCP ${server.name}: restart needed (${outcome?.restartReason ?? application ?? 'no verdict'})`);
+  return 'restart-required';
 }
 
 /**

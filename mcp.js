@@ -257,9 +257,10 @@ export async function writeMcpServers(file, servers) {
  * `applyEnabled` (optional) runs after a successful document write that changed
  * a server's `enabled` flag (setEnabled / update / remove / create). The Host
  * passes the plugin-manager bridge here so an existing harness composition
- * entry (`mcp-<name>`) is reloaded in the same breath — see `index.js`. It
- * receives the already-persisted server record; its own failures are collected
- * on the returned record (`applyError`), never fail the document write.
+ * entry (`mcp-<name>`, which the Loader addresses as `include:mcp-<name>`) is
+ * reloaded in the same breath — see `index.js`. It receives the already-persisted
+ * server record; its own failures are collected on the returned record
+ * (`applyError`), never fail the document write.
  */
 export class McpStore {
   /** @param file - absolute `mcp.json` path. */
@@ -355,7 +356,15 @@ export class McpStore {
   }
 
   /**
-   * Remove one server; a removed server's composition entry is disabled.
+   * Remove one server and switch its composition entry off.
+   *
+   * The document flag is not a witness for the running composition: a
+   * `mcp-<name>` row keeps running after the record says `enabled: false`
+   * whenever a sync was skipped (that is exactly how the panel switch used to
+   * drift). The row outlives the record, so a removal always asks the bridge,
+   * whatever the flag says — and `absent` (nothing in the composition owns the
+   * name, or this profile is not managed) is reported instead of passing for a
+   * successful teardown.
    *
    * @returns `{ removed, applied?, applyError? }` — `removed: false` when the
    * document had no such server. The enable-sync outcome travels with the
@@ -371,7 +380,6 @@ export class McpStore {
       const removed = existing.servers[index];
       const servers = existing.servers.filter((entry) => entry.name !== name);
       await writeMcpServers(this.file, servers);
-      if (!removed.enabled) return { removed: true };
       const synced = await this.syncEnabled({ ...removed, enabled: false });
       return {
         removed: true,
