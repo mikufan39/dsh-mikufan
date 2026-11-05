@@ -71,8 +71,6 @@ window.__ModuleLoader__.load({
     const PACKAGE_NAME = 'dsh-mikufan';
     /** Host route prefix, relative to the page base. */
     const API_PREFIX = 'mikufan/api';
-    /** The per-session "..." menu rows. */
-    const MENU_SLOT = 'sidebar.workspaces.session.menu.item';
     /** The hover controls at the end of one session row. */
     const ROW_ACTION_SLOT = 'sidebar.workspaces.session.row.action';
     /** Sidebar panel icon list entry for the control panel. */
@@ -81,8 +79,19 @@ window.__ModuleLoader__.load({
     const MAIN_SLOT = 'main';
     /** Panel id: both the sidebar entry and the `main` key. */
     const CONTROL_PANEL_ID = 'mikufan-control-panel';
-    /** Our row sits after the shipped rows (`archive` 400, `session-id` 450). */
-    const MENU_ORDER = 500;
+    /**
+     * Order of our session-menu row. The row lives in the menu **footer**
+     * (`afterContent`) rather than in the content list: the shipped
+     * 归档会话 row claims the footer at order 600 (it moved there in DSH
+     * 0.2.1), and only footer rows follow it. 700 therefore keeps 删除会话
+     * directly below 归档会话 — its long-standing place in the menu.
+     */
+    const SESSION_MENU_ORDER = 700;
+    /** Keyed `contextMenu.icon` entries for the two menu states. */
+    const DELETE_MENU_ICON = `${PACKAGE_NAME}.delete-session`;
+    const CANCEL_DELETE_MENU_ICON = `${PACKAGE_NAME}.cancel-delete-session`;
+    /** The fixed Delete binding that marks the open Session for deletion. */
+    const DELETE_SHORTCUT_ID = `${PACKAGE_NAME}.delete-session`;
     /** Our action sits after the shipped row actions (`pin`, `archive`). */
     const ROW_ACTION_ORDER = 900;
     /** Sidebar rail position of the control panel entry. */
@@ -102,6 +111,7 @@ window.__ModuleLoader__.load({
       zh: {
         'menu.deleteSession': '删除会话',
         'menu.cancelDeleteSession': '取消删除标记',
+        'shortcut.deleteSession': '删除会话',
         'row.cancelDeleteSession': '取消删除标记',
         'deleteFeature.title': '删除会话',
         'deleteFeature.description': '被删除的会话将在下次启动时删除，其子代理会话一并删除；停用此功能删除不再执行。',
@@ -355,6 +365,7 @@ window.__ModuleLoader__.load({
       en: {
         'menu.deleteSession': 'Delete session',
         'menu.cancelDeleteSession': 'Cancel deletion mark',
+        'shortcut.deleteSession': 'Delete session',
         'row.cancelDeleteSession': 'Cancel deletion mark',
         'deleteFeature.title': 'Delete sessions',
         'deleteFeature.description': 'Marked sessions are deleted at the next startup together with their subagent sessions; disabling this feature stops the sweep.',
@@ -783,6 +794,18 @@ window.__ModuleLoader__.load({
       emit();
     }
 
+    /**
+     * Re-resolve triggers for the session menu row: the feature switch and the
+     * marked set. The menu keeps its label in step with both while it stays
+     * open (the Delete key can flip the state under it).
+     */
+    const deleteStateObservables = [
+      { getSnapshot: () => features.deleteSessionsEnabled, subscribe: subscribeFeatures },
+      { getSnapshot: () => marked, subscribe },
+    ];
+    /** The Session the open session menu describes, or null. */
+    let sessionMenuTarget = null;
+
     function addMark(id) {
       if (marked.has(id)) return;
       const next = new Set(marked);
@@ -872,6 +895,8 @@ window.__ModuleLoader__.load({
     const RECONCILE_INTERVAL_MS = 2000;
     /** Mutating requests sent from this tab; a reconcile never clobbers them. */
     let mutating = 0;
+    /** Counts local writes, so a read that started before one cannot undo it. */
+    let markWrites = 0;
     /** Pending reconciliation timer, or null. */
     let pollTimer = null;
     /** Whether the one-time read failure was already reported. */
@@ -899,8 +924,13 @@ window.__ModuleLoader__.load({
 
     /** Read the Host's marked set and adopt it. @returns whether the read worked. */
     async function adoptHostMarked() {
+      const writes = markWrites;
       try {
         const value = await callHost('marked', { method: 'GET', headers: { accept: 'application/json' } });
+        // A read that started before a local write answers with the older list:
+        // adopting it would drop a mark the Host already accepted (the boot
+        // read racing a Delete press is the usual case).
+        if (markWrites !== writes) return true;
         if (Array.isArray(value?.ids)) setMarked(value.ids);
         return true;
       } catch (error) {
@@ -929,6 +959,7 @@ window.__ModuleLoader__.load({
     async function markForDeletion(sessionId) {
       addMark(sessionId);
       mutating += 1;
+      markWrites += 1;
       try {
         const value = await callHost('mark', {
           method: 'POST',
@@ -947,6 +978,7 @@ window.__ModuleLoader__.load({
     async function cancelDeletion(sessionId) {
       removeMark(sessionId);
       mutating += 1;
+      markWrites += 1;
       try {
         const value = await callHost('unmark', {
           method: 'POST',
@@ -963,30 +995,20 @@ window.__ModuleLoader__.load({
     }
 
     // ---------------------------------------------------------------------
-    // Menu row styles: copied from the host's menu primitive (`MenuItemButton`
-    // in the Web bundle) and re-prefixed; token references only.
+    // Session row styles. The menu row itself is a registered menu action, so
+    // the host's menu primitive owns its look; only the hover control that
+    // replaces the shipped row actions needs styling here.
     // ---------------------------------------------------------------------
     installStyle(
       STYLE_BASE,
       `
-.MikufanMenuItemWrap{position:relative}
-.MikufanMenuItemSeparator{height:.5px;margin:3px 2px;background:var(--dsw-alias-border-l2)}
-.MikufanMenuItemButton{display:flex;align-items:center;gap:6px;width:100%;min-height:34px;padding:6px 8px;border:none;border-radius:var(--dsw-radius-md);background:transparent;cursor:pointer;font-size:13px;line-height:20px;color:var(--dsw-alias-label-primary);text-align:left;font-family:inherit}
-.MikufanMenuItemButton:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover)}
-.MikufanMenuItemButton:focus-visible:not(:disabled){background:var(--dsw-alias-interactive-bg-hover);outline:none}
-.MikufanMenuItemButton:disabled{opacity:.4;cursor:not-allowed}
-.MikufanMenuItemIcon{display:inline-flex;flex:none;width:14px;height:14px;align-items:center;justify-content:center;color:var(--dsw-alias-menu-icon)}
-.MikufanMenuItemIcon svg{width:14px;height:14px}
-.MikufanMenuItemLabel{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.MikufanMenuItemDanger{color:var(--dsw-alias-state-error-primary)}
-.MikufanMenuItemDanger .MikufanMenuItemIcon{color:var(--dsw-alias-state-error-primary)}
-.MikufanMenuItemDanger:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover-danger)}
-.MikufanMenuItemDanger:focus-visible:not(:disabled){background:var(--dsw-alias-interactive-bg-hover-danger);outline:none}
 .MikufanRowAction{display:inline-flex;flex:none;align-items:center}
 .MikufanRowActionButton{border-radius:var(--dsw-radius-xs);cursor:pointer;width:16px;height:16px;color:var(--dsw-alias-label-tertiary);background:0 0;border:none;flex:none;justify-content:center;align-items:center;padding:0;display:inline-flex}
 .MikufanRowActionButton:hover{color:var(--dsw-alias-label-primary)}
 .MikufanRowActionButton:focus-visible{color:var(--dsw-alias-label-primary);outline:none}
 .MikufanRowActionButton svg{width:15px;height:15px}
+.MikufanMenuShortcut{flex:none;margin-inline-start:auto;color:var(--dsw-alias-label-caption);font-size:11px;line-height:16px}
+.MikufanMenuKeycap{display:inline-flex;align-items:center;font:inherit;color:inherit}
 `,
     );
 
@@ -6604,51 +6626,179 @@ window.__ModuleLoader__.load({
     }
 
     /**
-     * One row in a session's "..." menu.
+     * The "删除会话" row of a session's "..." menu, described to the host's
+     * menu registry.
      *
-     * Rendered only while the delete-sessions feature is enabled: the control
-     * panel's switch owns the visibility, so a disabled feature leaves no menu
-     * rows behind.
+     * It is a registered menu action rather than a legacy slot row because the
+     * row has to join the menu **footer**: DSH 0.2.1 gives the shipped
+     * 归档会话 row `afterContent: true` (footer, order 600), and the footer is
+     * the only region rendered after the legacy
+     * `sidebar.workspaces.session.menu.item` content slot this plugin used to
+     * render in. Our order (700) puts 删除会话 directly below 归档会话.
      *
-     * @param props.sessionId - the row's session.
-     * @param props.displayTitle - its title (used for the accessible name).
-     * @param props.useMenuOpenState - the slot's menu-open state hook.
-     * @param props.translate - localized text for this plugin's namespace.
-     * @param props.markForDeletion - Host operation: mark for the startup delete.
-     * @param props.cancelDeletion - inverse Host operation.
+     * The row disappears while the delete-sessions feature is off — the control
+     * panel's switch owns the visibility.
+     *
+     * @param sessionId - the row's session.
+     * @param displayTitle - its title (used in the failure text).
+     * @param translate - localized text for this plugin's namespace.
+     * @returns one menu action, or none when the feature is off.
      */
-    function DeleteSessionMenuItem(props) {
-      const { sessionId, displayTitle, useMenuOpenState, translate, markForDeletion: mark, cancelDeletion: cancel } = props;
-      const deleteEnabled = useSyncExternalStore(subscribeFeatures, () => getFeature('deleteSessionsEnabled'));
-      if (!deleteEnabled) return null;
-      const menuState = typeof useMenuOpenState === 'function' ? useMenuOpenState() : undefined;
-      const closeMenu = typeof menuState?.[1] === 'function' ? menuState[1] : undefined;
-      const isMarked = useSyncExternalStore(subscribe, () => marked.has(sessionId));
+    function deleteSessionMenuActions(sessionId, displayTitle, translate) {
+      if (!features.deleteSessionsEnabled) return [];
+      if (typeof sessionId !== 'string' || sessionId === '') return [];
+      const isMarked = marked.has(sessionId);
       const label = isMarked
         ? translate('menu.cancelDeleteSession', '取消删除标记')
         : translate('menu.deleteSession', '删除会话');
-      const onSelect = () => {
-        if (typeof closeMenu === 'function') closeMenu(false);
-        const operation = isMarked ? cancel : mark;
-        if (typeof operation === 'function') void operation(sessionId);
-      };
-      return h(
-        'div',
-        { className: 'MikufanMenuItemWrap' },
-        h('div', { className: 'MikufanMenuItemSeparator', role: 'separator' }),
-        h(
-          'button',
-          {
-            type: 'button',
-            role: 'menuitem',
-            className: isMarked ? 'MikufanMenuItemButton' : 'MikufanMenuItemButton MikufanMenuItemDanger',
-            'aria-label': displayTitle ? `${label}: ${displayTitle}` : label,
-            onClick: onSelect,
+      return [
+        {
+          id: 'delete-session',
+          label,
+          icon: { key: isMarked ? CANCEL_DELETE_MENU_ICON : DELETE_MENU_ICON },
+          danger: !isMarked,
+          separatorBefore: true,
+          afterContent: true,
+          failureLabel: displayTitle ? `${label}: ${displayTitle}` : label,
+          run: () => {
+            const operation = isMarked ? cancelDeletion : markForDeletion;
+            void operation(sessionId);
           },
-          h('span', { className: 'MikufanMenuItemIcon' }, isMarked ? h(UndoIcon) : h(TrashIcon)),
-          h('span', { className: 'MikufanMenuItemLabel' }, label),
-        ),
-      );
+        },
+      ];
+    }
+
+    /**
+     * Fixed Delete input: mark the target Session for deletion, or clear an
+     * existing mark.
+     *
+     * Bare Delete is reserved for configurable commands (the host refuses to
+     * bind it), so the key is a fixed action handled here. Only the page region
+     * qualifies: a Delete typed into a field, the terminal, or a dialog belongs
+     * to that control. The target is, in order, the session row under the focus,
+     * the row the open context menu describes, or the Session the main view
+     * shows.
+     *
+     * @param input - one normalized fixed input, or the reset notice.
+     * @param openSessionId - resolves the Session shown in the main view.
+     * @param menuSessionId - resolves the Session the open context menu describes.
+     */
+    function deleteShortcutInput(input, openSessionId, menuSessionId) {
+      if (input?.type !== 'keydown') return;
+      const gesture = input.gesture ?? {};
+      const context = input.context ?? {};
+      if (gesture.code !== 'Delete' || gesture.repeat || gesture.composing || gesture.defaultPrevented) return;
+      if (gesture.control || gesture.alt || gesture.shift || gesture.meta) return;
+      if (context.region !== 'page') return;
+      // An open menu counts as a modal layer for the host. A Delete pressed
+      // inside it is not background input: the hint sits on that menu's own row,
+      // so the row the menu describes is the target.
+      const menu = typeof context.target?.closest === 'function' ? context.target.closest('[role="menu"]') : null;
+      if (context.modal != null && menu === null) return;
+      if (!features.deleteSessionsEnabled) return;
+      const row = typeof context.target?.closest === 'function' ? context.target.closest('[data-row-key^="session:"]') : null;
+      const rowKey = typeof row?.getAttribute === 'function' ? row.getAttribute('data-row-key') : null;
+      const sessionId =
+        typeof rowKey === 'string' && rowKey.startsWith('session:')
+          ? rowKey.slice('session:'.length)
+          : (menu === null ? '' : menuSessionId()) || openSessionId();
+      if (typeof sessionId !== 'string' || sessionId === '') return;
+      if (typeof input.consume === 'function') input.consume();
+      void (marked.has(sessionId) ? cancelDeletion : markForDeletion)(sessionId);
+    }
+
+    /** Marks a keycap this plugin painted into a host menu row. */
+    const KEYCAP_ATTR = 'data-mikufan-menu-keycap';
+
+    /**
+     * Paint the `Delete` keycap on this plugin's session menu row.
+     *
+     * The host renders a menu keycap only for a *configurable* command, and bare
+     * `Delete` is a reserved combination that the shortcut service refuses to
+     * bind — the key is a fixed action instead (see DELETE_SHORTCUT_ID). The row
+     * therefore arrives without its hint and the hint is painted here: the row
+     * is found by its label, and the keycap markup is copied from a sibling row
+     * of the same menu, so the look follows the host stylesheet without copying
+     * class names that change between builds.
+     *
+     * @param doc - the product document.
+     * @param labels - the labels this row can carry (delete / cancel mark).
+     * @param keyLabel - the keycap text to show.
+     */
+    function paintSessionMenuKeycap(doc, labels, keyLabel) {
+      const rows = [...(doc?.querySelectorAll?.('[role="menuitem"]') ?? [])];
+      const template = rows.map(keycapTemplate).find((node) => node !== null) ?? null;
+      for (const row of rows) {
+        const label = typeof row.textContent === 'string' ? row.textContent.trim() : '';
+        if (!labels.includes(label)) continue;
+        if ([...row.children].some((child) => child.getAttribute?.(KEYCAP_ATTR) != null)) continue;
+        row.setAttribute('aria-keyshortcuts', keyLabel);
+        row.appendChild(buildKeycap(doc, template, keyLabel));
+      }
+    }
+
+    /**
+     * The keycap a sibling menu row already renders, or null.
+     * @param row - one menu item.
+     */
+    function keycapTemplate(row) {
+      for (const child of [...(row.children ?? [])]) {
+        const className = typeof child.className === 'string' ? child.className : '';
+        if (className.includes('_shortcut_') && child.getAttribute?.('aria-hidden') === 'true') return child;
+      }
+      return null;
+    }
+
+    /**
+     * One keycap for the menu row: a copy of a shipped keycap when the menu has
+     * one, otherwise this plugin's own markup (styled by the row stylesheet).
+     * @param doc - the product document.
+     * @param template - the shipped keycap to copy, or null.
+     * @param keyLabel - the keycap text to show.
+     */
+    function buildKeycap(doc, template, keyLabel) {
+      if (template !== null && typeof template.cloneNode === 'function') {
+        const hint = template.cloneNode(true);
+        // The shipped keycap separates its keys with "+" spans; our row has one
+        // key, so every other keycap and separator goes away.
+        const kbds = [];
+        const collect = (node) => {
+          for (const child of [...node.children]) {
+            if (child.tagName === 'KBD') kbds.push(child);
+            else collect(child);
+          }
+        };
+        collect(hint);
+        const keep = kbds[0] ?? null;
+        for (const kbd of kbds.slice(1)) kbd.remove();
+        const prune = (node) => {
+          for (const child of [...node.children]) {
+            if (child.tagName === 'KBD') continue;
+            if (child.children.length > 0) prune(child);
+            else child.remove();
+          }
+        };
+        prune(hint);
+        if (keep === null) {
+          const kbd = doc.createElement('kbd');
+          kbd.textContent = keyLabel;
+          hint.appendChild(kbd);
+        } else {
+          keep.textContent = keyLabel;
+        }
+        hint.setAttribute(KEYCAP_ATTR, '');
+        hint.setAttribute('aria-hidden', 'true');
+        return hint;
+      }
+      const hint = doc.createElement('span');
+      hint.className = 'MikufanMenuShortcut';
+      hint.setAttribute(KEYCAP_ATTR, '');
+      hint.setAttribute('aria-hidden', 'true');
+      const kbd = doc.createElement('kbd');
+      kbd.className = 'MikufanMenuKeycap';
+      kbd.textContent = keyLabel;
+      hint.appendChild(kbd);
+      return hint;
     }
 
     /**
@@ -6829,17 +6979,101 @@ window.__ModuleLoader__.load({
         void hydrate();
         void hydrateFeatures();
 
-        ctx.slots.inject(MENU_SLOT, () =>
-          ctx.slots.register(
-            {
-              name: MENU_SLOT,
-              id: 'mikufan-delete-session',
-              order: MENU_ORDER,
-              inject: () => ({ translate, markForDeletion, cancelDeletion }),
-            },
-            DeleteSessionMenuItem,
-          ),
-        );
+        // The two menu icons. The context menu renders an action's icon through
+        // the keyed `contextMenu.icon` slot, so each row state owns one key.
+        ctx.slots.inject('contextMenu.icon', function* () {
+          yield ctx.slots.register({ name: 'contextMenu.icon', key: DELETE_MENU_ICON }, TrashIcon);
+          yield ctx.slots.register({ name: 'contextMenu.icon', key: CANCEL_DELETE_MENU_ICON }, UndoIcon);
+        });
+
+        // The menu row itself: a footer action (see SESSION_MENU_ORDER) so it
+        // sits below the shipped 归档会话 row. Service-gated: without the menu
+        // owner there is nothing to contribute to.
+        ctx.inject(['contextMenus'], (scoped) => {
+          scoped.effect(
+            () =>
+              scoped.contextMenus.register({
+                id: 'mikufan.delete-session',
+                target: 'session',
+                order: SESSION_MENU_ORDER,
+                observe: () => deleteStateObservables,
+                resolve: ({ sessionId, displayTitle }) => {
+                  // Remember which row this menu speaks for: the Delete key is
+                  // handled outside the menu and must act on that same Session.
+                  sessionMenuTarget = typeof sessionId === 'string' && sessionId !== '' ? sessionId : null;
+                  return deleteSessionMenuActions(sessionId, displayTitle, translate);
+                },
+              }),
+            'dsh-mikufan: delete-session menu',
+          );
+        });
+
+        // Delete marks (or unmarks) the session under the focus. Bare Delete is
+        // reserved for configurable commands — the host's shortcut service
+        // refuses to bind it — so this is a fixed action: it is listed in the
+        // host's shortcut reference and the key itself is handled here, after
+        // local controls had their say.
+        const openSessionId = () => {
+          try {
+            const snapshot = ctx.get('uiSession')?.adapter?.current?.getSnapshot?.();
+            return typeof snapshot?.key === 'string' ? snapshot.key : '';
+          } catch {
+            return '';
+          }
+        };
+        ctx.inject(['shortcuts'], (scoped) => {
+          scoped.effect(
+            () =>
+              scoped.shortcuts.registerFixed({
+                id: DELETE_SHORTCUT_ID,
+                label: () => translate('shortcut.deleteSession', '删除会话'),
+                keys: ['Delete'],
+                bindings: [{ code: 'Delete', modifiers: [] }],
+                group: 'application',
+              }),
+            'dsh-mikufan: delete-session shortcut reference',
+          );
+          scoped.effect(
+            () =>
+              scoped.shortcuts.observeFixedInput((input) =>
+                deleteShortcutInput(input, openSessionId, () => sessionMenuTarget ?? ''),
+              ),
+            'dsh-mikufan: delete-session shortcut',
+          );
+        });
+
+        // The Delete keycap on that menu row. The menu is a portal that appears
+        // and disappears, so the row is caught as it is inserted; the scan is
+        // limited to mutations that actually bring a menu item in.
+        ctx.effect(() => {
+          const doc = typeof document === 'undefined' ? undefined : document;
+          if (doc?.body === undefined || typeof MutationObserver !== 'function') return;
+          const labels = [
+            translate('menu.deleteSession', '删除会话'),
+            translate('menu.cancelDeleteSession', '取消删除标记'),
+          ];
+          const paint = () => {
+            try {
+              paintSessionMenuKeycap(doc, labels, 'Delete');
+            } catch (error) {
+              // A host markup change costs the hint, never the menu.
+              console.warn('[dsh-mikufan] could not paint the Delete keycap:', error);
+            }
+          };
+          const observer = new MutationObserver((records) => {
+            const menuRowAdded = records.some((record) =>
+              [...record.addedNodes].some(
+                (node) =>
+                  node?.nodeType === 1 &&
+                  (node.matches?.('[role="menuitem"]') === true || node.querySelector?.('[role="menuitem"]') != null),
+              ),
+            );
+            if (menuRowAdded) paint();
+          });
+          observer.observe(doc.body, { childList: true, subtree: true });
+          paint();
+          return () => observer.disconnect();
+        }, 'dsh-mikufan: delete-session menu keycap');
 
         ctx.slots.inject(ROW_ACTION_SLOT, () =>
           ctx.slots.register(
