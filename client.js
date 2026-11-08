@@ -332,6 +332,23 @@ window.__ModuleLoader__.load({
         'memory.search.placeholder': '搜索记忆',
         'memory.search.label': '搜索记忆',
         'memory.refresh': '刷新记忆列表',
+        'memory.filter.label': '按范围筛选',
+        'memory.filter.all': '全部',
+        'memory.filter.global': '全局',
+        'memory.filter.workspace': '工作区',
+        'memory.export.json': '导出 JSON',
+        'memory.export.markdown': '导出 Markdown',
+        'memory.export.done': '已导出记忆文件',
+        'memory.export.failed': '导出失败：{message}',
+        'memory.import': '导入',
+        'memory.import.hint': '从导出的 JSON 文件合并记忆',
+        'memory.import.done': '导入 {imported} 条，跳过 {skipped} 条',
+        'memory.import.failed': '导入失败：{message}',
+        'memory.import.unreadable': '读不到文件内容。',
+        'memory.pause.label': '本会话暂停记忆',
+        'memory.pause.on': '本会话不读也不写记忆，数据保留',
+        'memory.pause.off': '本会话正常读写记忆',
+        'memory.pause.noSession': '当前没有打开的会话，无法切换',
         'memory.readFailed': '记忆列表读取失败，请刷新页面重试。',
         'memory.new': '新建记忆',
         'memory.new.desc': '写一条希望 Agent 跨会话记住的事实，保存后立即进入记忆索引。',
@@ -339,6 +356,39 @@ window.__ModuleLoader__.load({
         'memory.edit.desc': '修改内容或类型，保存后立即生效。',
         'memory.field.content': '内容',
         'memory.field.type': '类型',
+        'memory.field.title': '标题',
+        'memory.title.placeholder': '留空自动取正文首句',
+        'memory.field.scope': '范围',
+        'memory.field.scopePath': '工作区路径',
+        'memory.scope.global': '全局',
+        'memory.scope.workspace': '工作区',
+        'memory.scope.placeholder': '例如 D:/Mikufan/Soft/dsh-mikufan',
+        'memory.scope.hint': '工作区记忆只在这个目录（及其子目录）的会话里出现。',
+        'memory.scope.required': '请填写工作区路径。',
+        'memory.field.pinned': '固定',
+        'memory.pinned.flag': '已固定',
+        'memory.pinned.on': '已固定（优先进入会话索引）',
+        'memory.pinned.off': '未固定',
+        'memory.pin.label': '固定这条记忆',
+        'memory.recall': '被引用 {count} 次',
+        'memory.archive': '归档',
+        'memory.restore': '恢复',
+        'memory.status.archived': '已归档',
+        'memory.status.superseded': '已被替代',
+        'memory.status.expired': '已过期',
+        'memory.info.source': '来源：{source}',
+        'memory.info.source.session': '来源：{source} · 会话 {session}…',
+        'memory.info.recall': '最近引用：{time}',
+        'memory.info.recall.none': '尚未被引用',
+        'memory.field.expires': '过期时间',
+        'memory.expires.clear': '清除',
+        'memory.expires.hint': '留空表示永不过期。',
+        'memory.error.expires': '过期时间无法解析，请重新选择。',
+        'memory.filter.status.label': '按状态筛选',
+        'memory.filter.status.all': '全部状态',
+        'memory.filter.status.active': '使用中',
+        'memory.filter.status.archived': '已归档',
+        'memory.filter.status.expired': '已过期',
         'memory.counter': '{count} / {max}',
         'memory.create': '创建',
         'memory.close': '关闭',
@@ -586,6 +636,23 @@ window.__ModuleLoader__.load({
         'memory.search.placeholder': 'Search memories',
         'memory.search.label': 'Search memories',
         'memory.refresh': 'Refresh memories',
+        'memory.filter.label': 'Filter by scope',
+        'memory.filter.all': 'All',
+        'memory.filter.global': 'Global',
+        'memory.filter.workspace': 'Workspace',
+        'memory.export.json': 'Export JSON',
+        'memory.export.markdown': 'Export Markdown',
+        'memory.export.done': 'Memory file exported',
+        'memory.export.failed': 'Export failed: {message}',
+        'memory.import': 'Import',
+        'memory.import.hint': 'Merge memories from an exported JSON file',
+        'memory.import.done': 'Imported {imported}, skipped {skipped}',
+        'memory.import.failed': 'Import failed: {message}',
+        'memory.import.unreadable': 'Could not read the file.',
+        'memory.pause.label': 'Pause memory for this session',
+        'memory.pause.on': 'This session neither reads nor writes memory; nothing is deleted',
+        'memory.pause.off': 'This session reads and writes memory as usual',
+        'memory.pause.noSession': 'No session is open, so this cannot be switched',
         'memory.readFailed': 'Could not read the memories. Refresh the page to retry.',
         'memory.new': 'New memory',
         'memory.new.desc': 'Write a fact the agent should remember across sessions; it joins the memory index as soon as you save.',
@@ -593,6 +660,39 @@ window.__ModuleLoader__.load({
         'memory.edit.desc': 'Change the content or type; saved changes apply immediately.',
         'memory.field.content': 'Content',
         'memory.field.type': 'Type',
+        'memory.field.title': 'Title',
+        'memory.title.placeholder': 'Leave blank to use the first sentence',
+        'memory.field.scope': 'Scope',
+        'memory.field.scopePath': 'Workspace path',
+        'memory.scope.global': 'Global',
+        'memory.scope.workspace': 'Workspace',
+        'memory.scope.placeholder': 'e.g. D:/Mikufan/Soft/dsh-mikufan',
+        'memory.scope.hint': 'A workspace memory only shows up in sessions of that directory and its subdirectories.',
+        'memory.scope.required': 'Enter a workspace path.',
+        'memory.field.pinned': 'Pin',
+        'memory.pinned.flag': 'Pinned',
+        'memory.pinned.on': 'Pinned (leads the session index)',
+        'memory.pinned.off': 'Not pinned',
+        'memory.pin.label': 'Pin this memory',
+        'memory.recall': 'Recalled {count} times',
+        'memory.archive': 'Archive',
+        'memory.restore': 'Restore',
+        'memory.status.archived': 'Archived',
+        'memory.status.superseded': 'Superseded',
+        'memory.status.expired': 'Expired',
+        'memory.info.source': 'Source: {source}',
+        'memory.info.source.session': 'Source: {source} · session {session}…',
+        'memory.info.recall': 'Last recalled: {time}',
+        'memory.info.recall.none': 'Never recalled yet',
+        'memory.field.expires': 'Expires',
+        'memory.expires.clear': 'Clear',
+        'memory.expires.hint': 'Leave it empty for no expiry.',
+        'memory.error.expires': 'The expiry time could not be parsed — pick it again.',
+        'memory.filter.status.label': 'Filter by status',
+        'memory.filter.status.all': 'All statuses',
+        'memory.filter.status.active': 'In use',
+        'memory.filter.status.archived': 'Archived',
+        'memory.filter.status.expired': 'Expired',
         'memory.counter': '{count} / {max}',
         'memory.create': 'Create',
         'memory.close': 'Close',
@@ -852,6 +952,25 @@ window.__ModuleLoader__.load({
       return payload.value;
     }
 
+    /**
+     * Read one Host route whose body is a *document*, not the usual
+     * `{ok, value}` envelope: the memory export is HTML-free raw text (a JSON
+     * or Markdown file), so it has to come back through `response.text()`.
+     * @param action - route below the API prefix.
+     * @param init - fetch options.
+     * @returns the body as text.
+     */
+    async function callHostText(action, init) {
+      const response = await fetch(apiUrl(action), init);
+      const text = typeof response.text === 'function' ? await response.text() : '';
+      if (!response.ok) {
+        const error = new Error(`HTTP ${response.status}`);
+        error.status = response.status;
+        throw error;
+      }
+      return text;
+    }
+
     // ---------------------------------------------------------------------
     // Card order: the memory, skills and MCP pages all show the newest-updated
     // record first. The Host hands every list over in its own storage order
@@ -1080,6 +1199,78 @@ window.__ModuleLoader__.load({
 
     /** Entry type vocabulary, aligned with the Host engine. */
     const MEMORY_TYPES = ['user', 'feedback', 'project', 'reference'];
+    /** Entry status vocabulary, aligned with the Host engine. */
+    const MEMORY_STATUS_ARCHIVED = 'archived';
+    /** Scope choices the dialog offers, in chip order. */
+    const MEMORY_SCOPE_MODES = ['global', 'workspace'];
+    /** Host-side cap on one entry's title (mirrors `MAX_TITLE_LENGTH` in `memory.js`). */
+    const MEMORY_MAX_TITLE = 80;
+    /** How much of the body stands in for a missing title on a card. */
+    const MEMORY_TITLE_FALLBACK = 40;
+    /** The scope value every session sees. */
+    const MEMORY_SCOPE_GLOBAL = 'global';
+    /** Prefix of a per-workspace scope value (`workspace:<forward-slash path>`). */
+    const MEMORY_SCOPE_WORKSPACE_PREFIX = 'workspace:';
+
+    /** `global` / `workspace` — the scope chip and the dialog's scope choice. */
+    function memoryScopeMode(scope) {
+      return typeof scope === 'string' && scope.startsWith(MEMORY_SCOPE_WORKSPACE_PREFIX) ? 'workspace' : 'global';
+    }
+
+    /** The stored path of a workspace scope (`''` for global). */
+    function memoryScopePath(scope) {
+      return memoryScopeMode(scope) === 'workspace' ? scope.slice(MEMORY_SCOPE_WORKSPACE_PREFIX.length) : '';
+    }
+
+    /**
+     * The stored scope value for a typed path: forward slashes, no trailing
+     * slash, lower case (the documented `workspace:<path>` form) and a blank
+     * path means global. `memory.js` normalizes the same way for comparison,
+     * so a stored scope always matches what a session computes for its cwd.
+     */
+    function memoryScopeOfPath(path) {
+      const cleaned = String(path ?? '')
+        .trim()
+        .replace(/\\/g, '/')
+        .replace(/\/+$/, '')
+        .toLowerCase();
+      return cleaned === '' ? MEMORY_SCOPE_GLOBAL : MEMORY_SCOPE_WORKSPACE_PREFIX + cleaned;
+    }
+
+    /** Last path segment of a workspace scope, for the compact scope chip. */
+    function memoryScopeTail(scope) {
+      const path = memoryScopePath(scope);
+      if (path === '') return '';
+      const parts = path.split('/').filter((part) => part !== '');
+      return parts.length === 0 ? path : parts[parts.length - 1];
+    }
+
+    /** The card's title line: the stored title, else the first 40 characters of the body. */
+    function memoryCardTitle(entry) {
+      const title = typeof entry?.title === 'string' ? entry.title.trim() : '';
+      if (title !== '') return title;
+      const content = typeof entry?.content === 'string' ? entry.content.trim() : '';
+      return content.length > MEMORY_TITLE_FALLBACK ? `${content.slice(0, MEMORY_TITLE_FALLBACK)}…` : content;
+    }
+
+    /**
+     * Whether one entry's expiry instant has passed. A missing or unparseable
+     * stamp is "no expiry", never "expired": a v1 record must not look stale.
+     */
+    function isMemoryExpired(entry, now = Date.now()) {
+      const raw = entry?.expiresAt;
+      if (typeof raw !== 'string' || raw === '') return false;
+      const at = Date.parse(raw);
+      return Number.isFinite(at) && at < now;
+    }
+
+    /** The card's scope chip: 全局, or 工作区 plus the last path segment. */
+    function memoryScopeChip(translate, scope) {
+      if (memoryScopeMode(scope) !== 'workspace') return translate('memory.scope.global', '全局');
+      const tail = memoryScopeTail(scope);
+      const base = translate('memory.scope.workspace', '工作区');
+      return tail === '' ? base : `${base} · ${tail}`;
+    }
     /** Valid MCP server name: the Codex `[mcp_servers.<name>]` key budget. */
     const MCP_NAME_PATTERN = /^[A-Za-z0-9_-]{1,32}$/;
     /** The two transports the Codex standard defines, in dialog order. */
@@ -1186,12 +1377,16 @@ window.__ModuleLoader__.load({
       });
     }
 
-    /** Create one memory from the panel (optimistic id stays server-side). */
-    async function createMemoryViaHost(content, type) {
+    /**
+     * Create one memory from the panel (the id and a derived title stay
+     * server-side). `fields` is the dialog's own field set: title, content,
+     * type, scope and pinned.
+     */
+    async function createMemoryViaHost(fields) {
       const value = await callHost('memory', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ content, type }),
+        body: JSON.stringify(fields),
       });
       if (value?.entry !== null && typeof value?.entry === 'object') upsertMemoryEntry(value.entry);
       return value.entry;
@@ -1231,6 +1426,93 @@ window.__ModuleLoader__.load({
         }
         throw error;
       }
+    }
+
+    /**
+     * Read the Host's export document. It is a *document*, not an envelope:
+     * the route answers raw JSON or Markdown text, so it has to come back
+     * through `response.text()` instead of `callHost`.
+     * @param format - `json` (the re-importable document) or `markdown`.
+     * @returns the document text.
+     */
+    async function readMemoryExport(format) {
+      const markdown = format === 'markdown';
+      return callHostText(`memory/export?format=${markdown ? 'markdown' : 'json'}`, {
+        method: 'GET',
+        headers: { accept: markdown ? 'text/markdown' : 'application/json' },
+      });
+    }
+
+    /**
+     * Save one text document through a download anchor. Returns false when the
+     * runtime has no Blob / object URL / real anchor (a headless harness), so a
+     * caller never has to branch on the browser features itself.
+     */
+    function saveTextFile(text, filename, mime) {
+      if (typeof document === 'undefined' || typeof Blob !== 'function' || typeof URL === 'undefined') return false;
+      if (typeof URL.createObjectURL !== 'function') return false;
+      const body = document.body;
+      if (body === null || body === undefined || typeof body.appendChild !== 'function') return false;
+      const href = URL.createObjectURL(new Blob([text], { type: mime }));
+      try {
+        const anchor = document.createElement('a');
+        if (typeof anchor.click !== 'function') return false;
+        anchor.href = href;
+        anchor.download = filename;
+        anchor.rel = 'noopener';
+        body.appendChild(anchor);
+        anchor.click();
+        if (typeof anchor.remove === 'function') anchor.remove();
+        return true;
+      } finally {
+        if (typeof URL.revokeObjectURL === 'function') URL.revokeObjectURL(href);
+      }
+    }
+
+    /**
+     * Merge one exported document into the Host store, then re-read the list so
+     * the grid shows exactly what the Host kept.
+     * @param data - the exported JSON document as text.
+     * @returns `{imported, skipped}` from the Host.
+     */
+    async function importMemoryViaHost(data) {
+      const value = await callHost('memory/import', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ data }),
+      });
+      await adoptHostMemory();
+      return value;
+    }
+
+    /** Read the session's "pause memory" flag ("临时会话"). */
+    async function readMemoryPause(sessionId) {
+      return callHost(`memory/pause?sessionId=${encodeURIComponent(sessionId)}`, {
+        method: 'GET',
+        headers: { accept: 'application/json' },
+      });
+    }
+
+    /**
+     * Read the Session's workspace through the Host: `{sessionId, cwd, scope}`,
+     * both null when the Host cannot resolve one (no open session, an Agent
+     * that has no directory yet). The panel uses the cwd to prefill a new
+     * workspace scope; the scope spelling is the Host's, never guessed here.
+     */
+    async function readMemorySession(sessionId) {
+      return callHost(`memory/session?sessionId=${encodeURIComponent(sessionId)}`, {
+        method: 'GET',
+        headers: { accept: 'application/json' },
+      });
+    }
+
+    /** Turn the session's "pause memory" flag on or off. */
+    async function saveMemoryPause(sessionId, paused) {
+      return callHost('memory/pause', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ sessionId, paused }),
+      });
     }
 
     // ---------------------------------------------------------------------
@@ -2298,9 +2580,15 @@ window.__ModuleLoader__.load({
       `
 .MikufanMemoryPanel{display:flex;flex-direction:column;min-height:0;gap:14px}
 .MikufanMemoryNotice{display:flex;align-items:center;gap:8px;padding:9px 12px;border:1px solid var(--dsw-alias-border-l1);border-radius:var(--dsw-radius-md);background:var(--dsw-alias-bg-layer-1);font-size:12px;line-height:18px;color:var(--dsw-alias-state-warn-label,var(--dsw-alias-label-secondary))}
+/* 临时会话 switch: the shared switch plus its two-line sentence. */
+.MikufanMemSession{display:flex;align-items:center;gap:10px;padding:9px 12px;border:1px solid var(--dsw-alias-border-l1);border-radius:var(--dsw-radius-md);background:var(--dsw-alias-bg-layer-1)}
+.MikufanMemSessionText{display:flex;flex-direction:column;gap:1px;min-width:0}
+.MikufanMemSessionLabel{font-size:12px;line-height:18px;color:var(--dsw-alias-label-primary)}
+.MikufanMemSessionHint{font-size:11px;line-height:16px;color:var(--dsw-alias-label-tertiary)}
+.MikufanMemSession button[aria-checked=true]~.MikufanMemSessionText .MikufanMemSessionHint{color:var(--dsw-alias-label-secondary)}
 .MikufanMemoryBar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;font-size:12px;line-height:18px;color:var(--dsw-alias-label-tertiary)}
 /* Right-aligned search + refresh, on the same row as the memory count. */
-.MikufanMemoryTools{display:flex;align-items:center;gap:8px;flex:none;margin-left:auto}
+.MikufanMemoryTools{display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:8px;flex:none;margin-left:auto}
 .MikufanMemSearch{display:flex;align-items:center;gap:6px;box-sizing:border-box;height:32px;width:210px;max-width:100%;padding:0 12px;border:.5px solid var(--dsw-alias-border-l1);border-radius:999px;background:var(--dsw-alias-bg-layer-1);transition:border-color .15s ease}
 .MikufanMemSearch:focus-within{border-color:var(--dsw-alias-brand-primary)}
 .MikufanMemSearchIcon{display:inline-flex;flex:none;color:var(--dsw-alias-label-tertiary)}
@@ -2314,6 +2602,20 @@ window.__ModuleLoader__.load({
 .MikufanMemRefresh:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:1px}
 .MikufanMemRefresh:disabled{opacity:.5;cursor:not-allowed}
 .MikufanMemRefresh svg{width:16px;height:16px}
+/* Scope filter + the export / import tools sit in the same pill row. */
+.MikufanMemFilter{box-sizing:border-box;height:32px;max-width:132px;padding:0 10px;border:.5px solid var(--dsw-alias-border-l1);border-radius:999px;background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-secondary);font-family:inherit;font-size:12px;line-height:18px;cursor:pointer}
+.MikufanMemFilter:hover{color:var(--dsw-alias-label-primary)}
+.MikufanMemFilterStatus{max-width:120px}
+.MikufanMemFilter:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:1px}
+.MikufanMemTool{box-sizing:border-box;height:32px;padding:0 12px;border:.5px solid var(--dsw-alias-border-l1);border-radius:999px;background:transparent;color:var(--dsw-alias-label-secondary);font-family:inherit;font-size:12px;line-height:18px;white-space:nowrap;cursor:pointer}
+.MikufanMemTool:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}
+.MikufanMemTool:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:1px}
+.MikufanMemTool:disabled{opacity:.5;cursor:not-allowed}
+.MikufanMemImport{position:relative;box-sizing:border-box;display:inline-flex;align-items:center;height:32px;padding:0 12px;border:.5px solid var(--dsw-alias-border-l1);border-radius:999px;color:var(--dsw-alias-label-secondary);font-size:12px;line-height:18px;white-space:nowrap;cursor:pointer}
+.MikufanMemImport:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}
+.MikufanMemImport:focus-within{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:1px}
+/* The file picker itself is visually gone; the label above is the button. */
+.MikufanMemFileInput{position:absolute;width:1px;height:1px;margin:-1px;padding:0;border:0;overflow:hidden;clip-path:inset(50%);opacity:0;pointer-events:none}
 .MikufanMemRefresh[data-busy=true] svg{animation:MikufanMemSpin .9s linear infinite}
 @keyframes MikufanMemSpin{to{transform:rotate(360deg)}}
 @media (prefers-reduced-motion:reduce){.MikufanMemRefresh[data-busy=true] svg{animation:none}}
@@ -2334,8 +2636,20 @@ window.__ModuleLoader__.load({
 .MikufanMemCard:hover{transform:translateY(-1px);box-shadow:0 4px 14px rgba(0,0,0,.07)}
 .MikufanMemCardTop{display:flex;align-items:center;gap:8px;min-width:0}
 .MikufanMemCardTop .MikufanSwitch{margin-left:auto}
+/* The card's first line is its title, falling back to the body's opening. */
+.MikufanMemTitle{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px;line-height:20px;font-weight:600;color:var(--dsw-alias-label-primary)}
+.MikufanMemCard[data-disabled=true] .MikufanMemTitle{color:var(--dsw-alias-label-tertiary)}
+.MikufanMemCard[data-status=archived] .MikufanMemTitle,.MikufanMemCard[data-status=superseded] .MikufanMemTitle{color:var(--dsw-alias-label-secondary)}
+.MikufanMemPin{display:inline-flex;flex:none;align-items:center;color:var(--dsw-alias-brand-primary)}
+.MikufanMemPin svg{width:12px;height:12px;display:block}
 .MikufanMemTag{flex:none;padding:1px 8px;border:.5px solid var(--dsw-alias-border-l2);border-radius:999px;color:var(--dsw-alias-label-secondary);font-size:11px;line-height:18px;white-space:nowrap}
 .MikufanMemSource{flex:none;font-size:11px;line-height:16px;color:var(--dsw-alias-label-tertiary)}
+/* Metadata row: type, source, scope and (when it applies) the archive state. */
+.MikufanMemChips{display:flex;flex-wrap:wrap;align-items:center;gap:6px;min-width:0}
+.MikufanMemScope{flex:none;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:1px 8px;border:.5px solid var(--dsw-alias-border-l1);border-radius:999px;color:var(--dsw-alias-label-secondary);font-size:11px;line-height:18px}
+.MikufanMemStatus{flex:none;padding:1px 8px;border:.5px solid var(--dsw-alias-border-l2);border-radius:999px;background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-tertiary);font-size:11px;line-height:18px;white-space:nowrap}
+/* An entry whose expiry instant has passed, beside its status chip. */
+.MikufanMemExpired{flex:none;padding:1px 8px;border:.5px solid var(--dsw-alias-state-error-primary);border-radius:999px;color:var(--dsw-alias-state-error-primary);font-size:11px;line-height:18px;white-space:nowrap}
 .MikufanMemCard[data-disabled=true] .MikufanMemTag{border-color:var(--dsw-alias-border-l1);color:var(--dsw-alias-label-quaternary,var(--dsw-alias-label-tertiary))}
 .MikufanMemBody{cursor:pointer}
 .MikufanMemBody:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:2px;border-radius:var(--dsw-radius-sm)}
@@ -2350,7 +2664,8 @@ window.__ModuleLoader__.load({
 .MikufanMemActionDanger{color:var(--dsw-alias-label-tertiary)}
 .MikufanMemActionDanger:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover-danger);color:var(--dsw-alias-state-error-primary)}
 .MikufanMemActionArmed{background:var(--dsw-alias-interactive-bg-hover-danger);color:var(--dsw-alias-state-error-primary)}
-.MikufanMemUpdated{margin-left:auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px;line-height:16px;color:var(--dsw-alias-label-tertiary)}
+.MikufanMemRecall{margin-left:auto;flex:none;font-size:11px;line-height:16px;color:var(--dsw-alias-label-tertiary);white-space:nowrap}
+.MikufanMemUpdated{margin-left:8px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px;line-height:16px;color:var(--dsw-alias-label-tertiary)}
 .MikufanMemErrorLine{margin:-4px 0 0;font-size:12px;line-height:18px;color:var(--dsw-alias-state-error-primary)}
 /* Create/edit dialog: a portalled overlay in the host's own modal idiom. */
 .MikufanMemMask{position:fixed;inset:0;z-index:1010;display:flex;align-items:center;justify-content:center;padding:24px;background:var(--dsw-alias-bg-mask-1);backdrop-filter:var(--dsw-mask-blur,blur(4px));-webkit-backdrop-filter:var(--dsw-mask-blur,blur(4px));animation:MikufanMemFade .16s ease-out}
@@ -2375,6 +2690,27 @@ window.__ModuleLoader__.load({
 .MikufanMemTextarea[data-over=true]{border-color:var(--dsw-alias-state-error-primary)}
 .MikufanMemCounter{align-self:flex-end;font-size:11px;line-height:16px;color:var(--dsw-alias-label-tertiary)}
 .MikufanMemCounter[data-over=true]{color:var(--dsw-alias-state-error-primary)}
+/* One-line fields: the title box and the workspace path box. */
+.MikufanMemInput{box-sizing:border-box;width:100%;height:32px;padding:0 11px;border:1px solid var(--dsw-alias-border-l2);border-radius:var(--dsw-radius-md);background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-primary);font-family:inherit;font-size:13px;line-height:20px}
+.MikufanMemInput::placeholder{color:var(--dsw-alias-label-quaternary,var(--dsw-alias-label-tertiary))}
+.MikufanMemInput:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:1px;border-color:var(--dsw-alias-brand-primary)}
+.MikufanMemInput[data-over=true]{border-color:var(--dsw-alias-state-error-primary)}
+/* Expiry: the native picker plus its 清除 button on one line. */
+.MikufanMemExpiresRow{display:flex;align-items:center;gap:8px;min-width:0}
+.MikufanMemDateInput{flex:1;min-width:0}
+.MikufanMemClear{flex:none;height:32px;padding:0 12px}
+/* Scope choice: the two chips, then the path box when 工作区 is picked. */
+.MikufanMemScopeRow{display:flex;flex-wrap:wrap;gap:6px}
+.MikufanMemFieldHint{margin:0;font-size:11px;line-height:16px;color:var(--dsw-alias-label-tertiary)}
+.MikufanMemFieldHint[data-error=true]{color:var(--dsw-alias-state-error-primary)}
+/* Pin row: label, the state sentence and the shared switch. */
+.MikufanMemToggleRow{display:flex;align-items:center;gap:10px}
+.MikufanMemToggleRow .MikufanMemFieldLabel{flex:none}
+.MikufanMemToggleRow .MikufanSwitch{margin-left:auto}
+.MikufanMemBtnArchive{margin-right:auto}
+/* The read-only provenance / recall / expiry block at the dialog's bottom. */
+.MikufanMemInfo{display:flex;flex-direction:column;gap:3px;padding:9px 11px;border:1px solid var(--dsw-alias-border-l1);border-radius:var(--dsw-radius-md);background:var(--dsw-alias-bg-layer-1)}
+.MikufanMemInfoLine{font-size:11px;line-height:16px;color:var(--dsw-alias-label-tertiary);word-break:break-all}
 .MikufanMemTypes{display:flex;flex-wrap:wrap;gap:6px}
 .MikufanMemTypeChip{padding:4px 12px;border:.5px solid var(--dsw-alias-border-l2);border-radius:999px;background:transparent;color:var(--dsw-alias-label-secondary);font-family:inherit;font-size:12px;line-height:18px;cursor:pointer}
 .MikufanMemTypeChip:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}
@@ -2440,6 +2776,16 @@ window.__ModuleLoader__.load({
       );
     }
 
+    /** 12px pin for a pinned card's title line. */
+    function PinIcon() {
+      return h(
+        'svg',
+        { viewBox: '0 0 16 16', fill: 'none', stroke: 'currentColor', strokeWidth: 1.4, strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': true },
+        h('path', { d: 'M6 2.6h4l-.7 3.1 1.9 2.4H4.8l1.9-2.4z' }),
+        h('path', { d: 'M8 8.1v5.3' }),
+      );
+    }
+
     /** 16px circular arrows for the memory-list refresh button. */
     function RefreshIcon() {
       return h(
@@ -2457,6 +2803,32 @@ window.__ModuleLoader__.load({
       if (Number.isNaN(date.getTime())) return '';
       const pad = (part) => String(part).padStart(2, '0');
       return `${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+    }
+
+    /**
+     * An entry's expiry instant as the value a `datetime-local` input expects:
+     * local wall-clock time, no zone suffix. Empty when absent or unparseable,
+     * which is also what "no expiry" looks like in the dialog.
+     */
+    function memoryExpiresInputValue(value) {
+      if (typeof value !== 'string' || value === '') return '';
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) return '';
+      const pad = (part) => String(part).padStart(2, '0');
+      return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+    }
+
+    /**
+     * The dialog's expiry draft as the ISO instant the Host stores: a blank
+     * draft clears the field (`null`), a picked instant becomes UTC ISO.
+     * @returns `{ ok: true, value }` or `{ ok: false }` for junk input.
+     */
+    function memoryExpiresIso(draft) {
+      const text = String(draft ?? '').trim();
+      if (text === '') return { ok: true, value: null };
+      const date = new Date(text);
+      if (Number.isNaN(date.getTime())) return { ok: false, value: null };
+      return { ok: true, value: date.toISOString() };
     }
 
     /** `操作失败：<message>` for one rejection, shared by the cards and the dialog. */
@@ -2500,10 +2872,12 @@ window.__ModuleLoader__.load({
     }
 
     /**
-     * One memory entry as a rounded card: a type tag, its source and the
-     * enable switch on the header row; the first lines of the content below
-     * (CSS clamps it to three lines); an 编辑 / 删除 footer. Clicking the
-     * content opens the edit dialog, which is where the full text lives.
+     * One memory entry as a rounded card: the title line (the stored title, or
+     * the body's opening when it has none), the enable switch, a metadata row
+     * (type, source, scope, archive state), the first lines of the content
+     * (CSS clamps it to three lines) and an 编辑 / 删除 footer with the recall
+     * count and the last update. Clicking the content opens the edit dialog,
+     * which is where the full text lives.
      */
     function MemoryCard(props) {
       const { entry, translate, onEdit } = props;
@@ -2512,6 +2886,25 @@ window.__ModuleLoader__.load({
       const [armed, setArmed] = useState(false);
       const typeLabel = translate(`memory.type.${entry.type}`, entry.type);
       const sourceLabel = translate(`memory.source.${entry.source}`, entry.source);
+      const titleLabel = memoryCardTitle(entry);
+      const scopeLabel = memoryScopeChip(translate, entry.scope);
+      const statusLabel =
+        entry.status === MEMORY_STATUS_ARCHIVED
+          ? translate('memory.status.archived', '已归档')
+          : entry.status === 'superseded'
+            ? translate('memory.status.superseded', '已被替代')
+            : '';
+      const recallCount = Number.isFinite(entry.recall?.count) ? entry.recall.count : 0;
+      const recallLabel = formatTemplate(translate('memory.recall', '被引用 {count} 次'), { count: recallCount });
+      // The counter's tooltip is the last recall instant, so a busy entry can be
+      // told apart from one that was only ever read once.
+      const lastRecall = formatMemoryTime(entry.recall?.lastAt);
+      const recallTitle =
+        lastRecall === ''
+          ? translate('memory.info.recall.none', '尚未被引用')
+          : formatTemplate(translate('memory.info.recall', '最近引用：{time}'), { time: lastRecall });
+      const expired = isMemoryExpired(entry);
+      const pinLabel = translate('memory.pinned.flag', '已固定');
       const enabledLabel = entry.enabled
         ? translate('memory.enabled.on', '已启用（会注入会话索引）')
         : translate('memory.enabled.off', '已停用（保留但不注入）');
@@ -2559,12 +2952,22 @@ window.__ModuleLoader__.load({
 
       return h(
         'div',
-        { className: 'MikufanMemCard', 'data-disabled': entry.enabled ? 'false' : 'true' },
+        {
+          className: 'MikufanMemCard',
+          'data-disabled': entry.enabled ? 'false' : 'true',
+          'data-status': typeof entry.status === 'string' ? entry.status : 'active',
+        },
         h(
           'div',
           { className: 'MikufanMemCardTop' },
-          h('span', { className: 'MikufanMemTag' }, typeLabel),
-          h('span', { className: 'MikufanMemSource' }, sourceLabel),
+          entry.pinned === true
+            ? h(
+                'span',
+                { className: 'MikufanMemPin', role: 'img', 'aria-label': pinLabel, title: pinLabel },
+                h(PinIcon, null),
+              )
+            : null,
+          h('div', { className: 'MikufanMemTitle', title: titleLabel }, titleLabel),
           h(
             'button',
             {
@@ -2579,6 +2982,15 @@ window.__ModuleLoader__.load({
             },
             h('span', { className: 'MikufanSwitchThumb' }),
           ),
+        ),
+        h(
+          'div',
+          { className: 'MikufanMemChips' },
+          h('span', { className: 'MikufanMemTag' }, typeLabel),
+          h('span', { className: 'MikufanMemSource' }, sourceLabel),
+          h('span', { className: 'MikufanMemScope' }, scopeLabel),
+          statusLabel !== '' ? h('span', { className: 'MikufanMemStatus' }, statusLabel) : null,
+          expired ? h('span', { className: 'MikufanMemExpired' }, translate('memory.status.expired', '已过期')) : null,
         ),
         h(
           'div',
@@ -2618,6 +3030,7 @@ window.__ModuleLoader__.load({
             h(CrossIcon, null),
             armed ? translate('memory.confirmDelete', '确认删除') : translate('memory.delete', '删除'),
           ),
+          h('span', { className: 'MikufanMemRecall', title: recallTitle }, recallLabel),
           updated !== ''
             ? h('span', { className: 'MikufanMemUpdated' }, formatTemplate(translate('memory.updated', '更新于 {time}'), { time: updated }))
             : null,
@@ -2628,21 +3041,56 @@ window.__ModuleLoader__.load({
 
     /**
      * The create/edit dialog: the memory page's "sub page" is this popup rather
-     * than an inline form. One textarea, the four type chips, 取消 / 保存.
-     * Portalled to `document.body` so the overlay covers the whole window; Esc,
-     * the backdrop and the close button all dismiss it (never while saving).
+     * than an inline form. The title box (optional — the Host derives one from
+     * the body when it is blank), the content textarea, the four type chips,
+     * the scope choice (global, or a workspace path), the pin switch and, when
+     * editing, an 归档 / 恢复 action. Portalled to `document.body` so the
+     * overlay covers the whole window; Esc, the backdrop and the close button
+     * all dismiss it (never while saving).
      */
     function MemoryDialog(props) {
-      const { mode, entry, translate, onClose } = props;
+      const { mode, entry, translate, onClose, workspaceCwd } = props;
       const editing = mode === 'edit' && entry !== null && entry !== undefined;
       const [draft, setDraft] = useState(editing ? entry.content : '');
+      const [titleDraft, setTitleDraft] = useState(
+        editing && typeof entry.title === 'string' ? entry.title : '',
+      );
+      const [scopeMode, setScopeMode] = useState(editing ? memoryScopeMode(entry.scope) : 'global');
+      const [scopePath, setScopePath] = useState(editing ? memoryScopePath(entry.scope) : '');
       const [type, setType] = useState(editing ? entry.type : 'project');
+      const [pinned, setPinned] = useState(editing ? entry.pinned === true : false);
+      // `datetime-local` speaks local wall-clock time; the Host stores ISO UTC.
+      const [expiresDraft, setExpiresDraft] = useState(editing ? memoryExpiresInputValue(entry.expiresAt) : '');
       const [busy, setBusy] = useState(false);
       const [error, setError] = useState('');
       const text = draft.trim();
+      const titleText = titleDraft.trim();
       // The Host trims before capping, so judge the trimmed length, not the raw one.
       const tooLong = text.length > MEMORY_MAX_CONTENT;
-      const canSave = !busy && text !== '' && !tooLong;
+      const titleTooLong = titleText.length > MEMORY_MAX_TITLE;
+      // A workspace scope needs a directory; a blank one would silently fall
+      // back to global, which is not what picking 工作区 says.
+      const scopeValue = scopeMode === 'workspace' ? memoryScopeOfPath(scopePath) : MEMORY_SCOPE_GLOBAL;
+      const scopeMissing = scopeMode === 'workspace' && scopeValue === MEMORY_SCOPE_GLOBAL;
+      const canSave = !busy && text !== '' && !tooLong && !titleTooLong && !scopeMissing;
+      const archived = editing && entry.status === MEMORY_STATUS_ARCHIVED;
+      // Read-only provenance / recall / expiry lines: edit mode only, because a
+      // brand new entry has none of them yet.
+      const sourceText = editing ? translate(`memory.source.${entry.source}`, entry.source) : '';
+      const provenanceSession =
+        editing && typeof entry.provenance?.sessionId === 'string' ? entry.provenance.sessionId : '';
+      const sourceLine =
+        provenanceSession === ''
+          ? formatTemplate(translate('memory.info.source', '来源：{source}'), { source: sourceText })
+          : formatTemplate(translate('memory.info.source.session', '来源：{source} · 会话 {session}…'), {
+              source: sourceText,
+              session: provenanceSession.slice(0, 8),
+            });
+      const recallTime = editing ? formatMemoryTime(entry.recall?.lastAt) : '';
+      const recallLine =
+        recallTime === ''
+          ? translate('memory.info.recall.none', '尚未被引用')
+          : formatTemplate(translate('memory.info.recall', '最近引用：{time}'), { time: recallTime });
       const title = editing ? translate('memory.edit.title', '编辑记忆') : translate('memory.new', '新建记忆');
       const description = editing
         ? translate('memory.edit.desc', '修改内容或类型，保存后立即生效。')
@@ -2691,14 +3139,33 @@ window.__ModuleLoader__.load({
         };
       }, []);
 
+      /** The dialog's whole editable field set — one shape for create and patch. */
+      const fields = (expiresAt) => ({ title: titleText, content: text, type, scope: scopeValue, pinned, expiresAt });
+
       const save = () => {
         if (!canSave) return;
+        // A junk expiry never reaches the Host: say so on the dialog and keep
+        // the draft (the picker itself cannot produce one, a paste can).
+        const expires = memoryExpiresIso(expiresDraft);
+        if (!expires.ok) {
+          setError(translate('memory.error.expires', '过期时间无法解析，请重新选择。'));
+          return;
+        }
         setBusy(true);
         setError('');
-        const operation = editing
-          ? patchMemoryViaHost(entry.id, { content: text, type })
-          : createMemoryViaHost(text, type);
+        const operation = editing ? patchMemoryViaHost(entry.id, fields(expires.value)) : createMemoryViaHost(fields(expires.value));
         Promise.resolve(operation)
+          .then(() => onClose())
+          .catch((cause) => setError(memoryErrorText(translate, cause)))
+          .finally(() => setBusy(false));
+      };
+
+      /** 归档 / 恢复: a status patch, applied as soon as it is clicked. */
+      const toggleArchive = () => {
+        if (busy || !editing) return;
+        setBusy(true);
+        setError('');
+        Promise.resolve(patchMemoryViaHost(entry.id, { status: archived ? 'active' : MEMORY_STATUS_ARCHIVED }))
           .then(() => onClose())
           .catch((cause) => setError(memoryErrorText(translate, cause)))
           .finally(() => setBusy(false));
@@ -2758,12 +3225,35 @@ window.__ModuleLoader__.load({
           h(
             'div',
             { className: 'MikufanMemField' },
+            h('label', { className: 'MikufanMemFieldLabel', htmlFor: 'mikufan-memory-title' }, translate('memory.field.title', '标题')),
+            h('input', {
+              id: 'mikufan-memory-title',
+              className: 'MikufanMemInput',
+              type: 'text',
+              value: titleDraft,
+              placeholder: translate('memory.title.placeholder', '留空自动取正文首句'),
+              maxLength: MEMORY_MAX_TITLE,
+              autoFocus: true,
+              spellCheck: false,
+              'data-over': titleTooLong ? 'true' : 'false',
+              'aria-label': translate('memory.field.title', '标题'),
+              onChange: (event) => setTitleDraft(event.target.value),
+              onKeyDown: (event) => {
+                if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
+                  event.preventDefault();
+                  save();
+                }
+              },
+            }),
+          ),
+          h(
+            'div',
+            { className: 'MikufanMemField' },
             h('label', { className: 'MikufanMemFieldLabel' }, translate('memory.field.content', '内容')),
             h('textarea', {
               className: 'MikufanMemTextarea',
               value: draft,
               placeholder: translate('memory.add.placeholder', '记一条新记忆，例如：用户偏好简洁回复…'),
-              autoFocus: true,
               spellCheck: false,
               'data-over': tooLong ? 'true' : 'false',
               'aria-label': translate('memory.field.content', '内容'),
@@ -2827,10 +3317,172 @@ window.__ModuleLoader__.load({
               ),
             ),
           ),
+          h(
+            'div',
+            { className: 'MikufanMemField' },
+            h('span', { className: 'MikufanMemFieldLabel' }, translate('memory.field.scope', '范围')),
+            h(
+              'div',
+              { className: 'MikufanMemScopeRow', role: 'radiogroup', 'aria-label': translate('memory.field.scope', '范围') },
+              MEMORY_SCOPE_MODES.map((candidate) =>
+                h(
+                  'button',
+                  {
+                    key: candidate,
+                    type: 'button',
+                    role: 'radio',
+                    className: 'MikufanMemTypeChip',
+                    'aria-checked': scopeMode === candidate,
+                    'data-scope': candidate,
+                    disabled: busy,
+                    onClick: () => {
+                      // Picking 工作区 with nothing typed yet starts from the
+                      // Session's own directory; a stored path is never replaced.
+                      if (
+                        candidate === 'workspace' &&
+                        scopePath.trim() === '' &&
+                        typeof workspaceCwd === 'string' &&
+                        workspaceCwd !== ''
+                      ) {
+                        setScopePath(workspaceCwd);
+                      }
+                      setScopeMode(candidate);
+                    },
+                    // A radiogroup is expected to move with the arrow keys too.
+                    onKeyDown: (event) => {
+                      const step =
+                        event.key === 'ArrowRight' || event.key === 'ArrowDown'
+                          ? 1
+                          : event.key === 'ArrowLeft' || event.key === 'ArrowUp'
+                            ? -1
+                            : 0;
+                      if (step === 0) return;
+                      event.preventDefault();
+                      const index = MEMORY_SCOPE_MODES.indexOf(candidate);
+                      const next =
+                        MEMORY_SCOPE_MODES[(index + step + MEMORY_SCOPE_MODES.length) % MEMORY_SCOPE_MODES.length];
+                      setScopeMode(next);
+                      const group = event.currentTarget.parentElement;
+                      const buttons = group === null ? [] : [...group.querySelectorAll('button[data-scope]')];
+                      const target = buttons.find((button) => button.dataset.scope === next);
+                      if (target !== undefined) target.focus();
+                    },
+                  },
+                  translate(`memory.scope.${candidate}`, candidate),
+                ),
+              ),
+            ),
+            scopeMode === 'workspace'
+              ? h('input', {
+                  className: 'MikufanMemInput',
+                  type: 'text',
+                  value: scopePath,
+                  placeholder: translate('memory.scope.placeholder', '例如 D:/Mikufan/Soft/dsh-mikufan'),
+                  'aria-label': translate('memory.field.scopePath', '工作区路径'),
+                  maxLength: 260,
+                  spellCheck: false,
+                  disabled: busy,
+                  onChange: (event) => setScopePath(event.target.value),
+                  onKeyDown: (event) => {
+                    if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
+                      event.preventDefault();
+                      save();
+                    }
+                  },
+                })
+              : null,
+            h(
+              'span',
+              { className: 'MikufanMemFieldHint', 'data-error': scopeMissing ? 'true' : 'false' },
+              scopeMissing
+                ? translate('memory.scope.required', '请填写工作区路径。')
+                : translate('memory.scope.hint', '工作区记忆只在这个目录（及其子目录）的会话里出现。'),
+            ),
+          ),
+          h(
+            'div',
+            { className: 'MikufanMemToggleRow' },
+            h('span', { className: 'MikufanMemFieldLabel' }, translate('memory.field.pinned', '固定')),
+            h(
+              'span',
+              { className: 'MikufanMemFieldHint' },
+              pinned ? translate('memory.pinned.on', '已固定（优先进入会话索引）') : translate('memory.pinned.off', '未固定'),
+            ),
+            h(
+              'button',
+              {
+                type: 'button',
+                role: 'switch',
+                className: 'MikufanSwitch',
+                'aria-checked': pinned,
+                'aria-label': translate('memory.pin.label', '固定这条记忆'),
+                title: translate('memory.pin.label', '固定这条记忆'),
+                disabled: busy,
+                onClick: () => setPinned(!pinned),
+              },
+              h('span', { className: 'MikufanSwitchThumb' }),
+            ),
+          ),
+          h(
+            'div',
+            { className: 'MikufanMemField' },
+            h(
+              'label',
+              { className: 'MikufanMemFieldLabel', htmlFor: 'mikufan-memory-expires' },
+              translate('memory.field.expires', '过期时间'),
+            ),
+            h(
+              'div',
+              { className: 'MikufanMemExpiresRow' },
+              h('input', {
+                id: 'mikufan-memory-expires',
+                className: 'MikufanMemInput MikufanMemDateInput',
+                type: 'datetime-local',
+                value: expiresDraft,
+                'aria-label': translate('memory.field.expires', '过期时间'),
+                disabled: busy,
+                onChange: (event) => setExpiresDraft(event.target.value),
+                onKeyDown: (event) => {
+                  if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
+                    event.preventDefault();
+                    save();
+                  }
+                },
+              }),
+              h(
+                'button',
+                {
+                  type: 'button',
+                  className: 'MikufanMemBtn MikufanMemClear',
+                  title: translate('memory.expires.clear', '清除'),
+                  'aria-label': translate('memory.expires.clear', '清除'),
+                  disabled: busy || expiresDraft === '',
+                  onClick: () => setExpiresDraft(''),
+                },
+                translate('memory.expires.clear', '清除'),
+              ),
+            ),
+            h('span', { className: 'MikufanMemFieldHint' }, translate('memory.expires.hint', '留空表示永不过期。')),
+          ),
+          editing
+            ? h(
+                'div',
+                { className: 'MikufanMemInfo' },
+                h('span', { className: 'MikufanMemInfoLine' }, sourceLine),
+                h('span', { className: 'MikufanMemInfoLine' }, recallLine),
+              )
+            : null,
           error !== '' ? h('div', { className: 'MikufanMemErrorLine', role: 'alert' }, error) : null,
           h(
             'div',
             { className: 'MikufanMemDialogFoot' },
+            editing
+              ? h(
+                  'button',
+                  { type: 'button', className: 'MikufanMemBtn MikufanMemBtnArchive', disabled: busy, onClick: toggleArchive },
+                  archived ? translate('memory.restore', '恢复') : translate('memory.archive', '归档'),
+                )
+              : null,
             h(
               'button',
               { type: 'button', className: 'MikufanMemBtn', disabled: busy, onClick: onClose },
@@ -6183,9 +6835,15 @@ window.__ModuleLoader__.load({
     /**
      * The memory page, rebuilt as a card grid in the dashboard's own idiom:
      * the first card is always the blank "+" card, every stored entry is one
-     * rounded card (type tag, source, enable switch, a three-line preview and
-     * an 编辑 / 删除 footer), and both creating and editing happen in the
-     * {@link MemoryDialog} popup instead of an inline form.
+     * rounded card (title line, metadata chips, enable switch, a three-line
+     * preview and an 编辑 / 删除 footer carrying the recall count), and both
+     * creating and editing happen in the {@link MemoryDialog} popup instead of
+     * an inline form.
+     *
+     * The bar above the grid is the page's toolbar: the entry count, a scope
+     * filter (全部 / 全局 / 工作区), the search field, a manual refresh, the two
+     * export downloads and the import picker. Above it sits the session switch
+     * ("临时会话": pause memory for this conversation only).
      */
     function MemoryPageBody(props) {
       const { translate } = props;
@@ -6199,6 +6857,20 @@ window.__ModuleLoader__.load({
       const [query, setQuery] = useState('');
       /** A manual refresh is in flight. */
       const [refreshing, setRefreshing] = useState(false);
+      /** Scope chip the grid is narrowed to: `all`, `global` or `workspace`. */
+      const [scopeFilter, setScopeFilter] = useState('all');
+      /** Status filter: `all`, `active`, `archived` or `expired`. */
+      const [statusFilter, setStatusFilter] = useState('all');
+      /** The one-line result notice (export, import, pause) above the grid. */
+      const [notice, setNotice] = useState('');
+      /** The session switch's state ("临时会话"). */
+      const [paused, setPaused] = useState(false);
+      /** A pause read/write is in flight. */
+      const [pauseBusy, setPauseBusy] = useState(false);
+      /** The Session's own directory, used to prefill a new workspace scope. */
+      const [sessionCwd, setSessionCwd] = useState('');
+      /** The Session this panel speaks for; `''` when the Host reports none. */
+      const sessionId = typeof props.currentSessionId === 'function' ? props.currentSessionId() : '';
 
       // Every mount reads the list again (the panel renders only the active
       // page), retried a few times across a slow boot; a hard failure surfaces
@@ -6207,19 +6879,90 @@ window.__ModuleLoader__.load({
         hydrateMemory();
       }, []);
 
+      // The pause flag belongs to one Session, so it is read whenever the panel
+      // opens for it — never cached in the module store. Coming back to the tab
+      // (window focus, or the document turning visible again) re-reads it, so a
+      // flag flipped in another window is picked up without a page reload; the
+      // panel holds no timer for this.
+      useEffect(() => {
+        if (sessionId === '') return undefined;
+        let alive = true;
+        /** @param report - surface a failure in the page notice. */
+        const readPause = (report) => {
+          void readMemoryPause(sessionId)
+            .then((value) => {
+              if (alive && typeof value?.paused === 'boolean') setPaused(value.paused);
+            })
+            .catch((cause) => {
+              if (alive && report) setNotice(memoryErrorText(translate, cause));
+            });
+        };
+        readPause(true);
+        const canListen = typeof window !== 'undefined' && typeof window.addEventListener === 'function';
+        if (!canListen) return () => { alive = false; };
+        const onFocus = () => readPause(false);
+        const onVisibilityChange = () => {
+          if (typeof document !== 'undefined' && document.visibilityState === 'visible') readPause(false);
+        };
+        window.addEventListener('focus', onFocus);
+        window.addEventListener('visibilitychange', onVisibilityChange);
+        return () => {
+          alive = false;
+          window.removeEventListener('focus', onFocus);
+          window.removeEventListener('visibilitychange', onVisibilityChange);
+        };
+      }, [sessionId]);
+
+      // The Session's directory feeds the dialog's workspace prefill. A failure
+      // is silent: it only means the path box starts empty.
+      useEffect(() => {
+        if (sessionId === '') return undefined;
+        let alive = true;
+        void readMemorySession(sessionId)
+          .then((value) => {
+            if (alive && typeof value?.cwd === 'string' && value.cwd !== '') setSessionCwd(value.cwd);
+          })
+          .catch(() => {});
+        return () => {
+          alive = false;
+        };
+      }, [sessionId]);
+
       const enabledCount = entries.filter((entry) => entry.enabled).length;
       const needle = query.trim().toLowerCase();
       // Newest-updated card first: an edited (or toggled) memory moves up, so
-      // the top of the grid is always what changed last. The search below only
-      // narrows that order, never reshuffles it. The search matches the content
-      // plus the localized type and source, so typing 项目 or Agent works as
-      // well as a phrase from the memory itself.
+      // the top of the grid is always what changed last. The scope filter, the
+      // status filter and the search then narrow that order, never reshuffle
+      // it. The search matches the title, the content plus the localized type
+      // and source, so typing 项目 or Agent works as well as a phrase from the
+      // memory itself.
       const ordered = newestFirst(entries);
+      // One clock read per render, so every card in one pass agrees on "now".
+      const now = Date.now();
+      /**
+       * The status buckets the bar offers. 使用中 means an entry the session
+       * index would actually use (active, not past its expiry); 已归档 is the
+       * archive flag; 已过期 is any live entry whose expiry instant has passed,
+       * archived or not. A superseded entry belongs to none of the three — it
+       * is retired already — so it only shows under 全部.
+       */
+      const matchesStatus = (entry) => {
+        if (statusFilter === 'all') return true;
+        if (statusFilter === 'expired') return entry.status !== 'superseded' && isMemoryExpired(entry, now);
+        if (statusFilter === MEMORY_STATUS_ARCHIVED) return entry.status === MEMORY_STATUS_ARCHIVED;
+        if (statusFilter === 'active') return entry.status === 'active' && !isMemoryExpired(entry, now);
+        return true;
+      };
+      const scoped = ordered.filter(
+        (entry) =>
+          (scopeFilter === 'all' || memoryScopeMode(entry.scope) === scopeFilter) && matchesStatus(entry),
+      );
       const visible =
         needle === ''
-          ? ordered
-          : ordered.filter((entry) =>
+          ? scoped
+          : scoped.filter((entry) =>
               [
+                entry.title,
                 entry.content,
                 translate(`memory.type.${entry.type}`, entry.type),
                 translate(`memory.source.${entry.source}`, entry.source),
@@ -6229,6 +6972,7 @@ window.__ModuleLoader__.load({
                 .includes(needle),
             );
       const searching = needle !== '';
+      const narrowing = searching || scopeFilter !== 'all' || statusFilter !== 'all';
 
       /** Manual refresh: one Host read, and the retry notice when it fails. */
       const onRefresh = () => {
@@ -6243,6 +6987,80 @@ window.__ModuleLoader__.load({
           .finally(() => setRefreshing(false));
       };
 
+      /** Download one export document (the JSON one is the re-importable one). */
+      const onExport = (format) => {
+        setNotice('');
+        void readMemoryExport(format)
+          .then((text) => {
+            const markdown = format === 'markdown';
+            const stamp = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+            saveTextFile(
+              text,
+              `memory-${stamp}.${markdown ? 'md' : 'json'}`,
+              markdown ? 'text/markdown' : 'application/json',
+            );
+            setNotice(translate('memory.export.done', '已导出记忆文件'));
+          })
+          .catch((cause) =>
+            setNotice(
+              formatTemplate(translate('memory.export.failed', '导出失败：{message}'), {
+                message: String(cause?.message ?? cause),
+              }),
+            ),
+          );
+      };
+
+      /** Merge one picked file, then let the Host list be re-read. */
+      const onImportFile = (event) => {
+        const file = event?.target?.files?.[0];
+        if (file === undefined || file === null) return;
+        setNotice('');
+        void Promise.resolve()
+          .then(() =>
+            typeof file.text === 'function'
+              ? file.text()
+              : Promise.reject(new Error(translate('memory.import.unreadable', '读不到文件内容。'))),
+          )
+          .then((text) => importMemoryViaHost(text))
+          .then((value) => {
+            setNotice(
+              formatTemplate(translate('memory.import.done', '导入 {imported} 条，跳过 {skipped} 条'), {
+                imported: Number(value?.imported ?? 0),
+                skipped: Number(value?.skipped ?? 0),
+              }),
+            );
+          })
+          .catch((cause) =>
+            setNotice(
+              formatTemplate(translate('memory.import.failed', '导入失败：{message}'), {
+                message: String(cause?.message ?? cause),
+              }),
+            ),
+          )
+          .finally(() => {
+            // Picking the same file twice must fire onChange again.
+            if (event?.target !== undefined && event.target !== null) event.target.value = '';
+          });
+      };
+
+      /** Flip this session's pause flag, optimistically, rolling back on failure. */
+      const onTogglePause = () => {
+        if (pauseBusy || sessionId === '') return;
+        const next = !paused;
+        setPauseBusy(true);
+        setPaused(next);
+        setNotice('');
+        void saveMemoryPause(sessionId, next)
+          .then((value) => {
+            if (typeof value?.paused === 'boolean') setPaused(value.paused);
+          })
+          .catch((cause) => {
+            setPaused(!next);
+            setNotice(memoryErrorText(translate, cause));
+          })
+          .finally(() => setPauseBusy(false));
+      };
+
       const editingEntry =
         dialog !== null && dialog.mode === 'edit' ? (entries.find((entry) => entry.id === dialog.id) ?? null) : null;
       const openCreate = () => {
@@ -6254,6 +7072,11 @@ window.__ModuleLoader__.load({
         setDialog({ mode: 'edit', id: entry.id });
       };
       const closeDialog = () => setDialog(null);
+      /** The session switch's state sentence (also its tooltip). */
+      const pauseText = paused
+        ? translate('memory.pause.on', '本会话不读也不写记忆，数据保留')
+        : translate('memory.pause.off', '本会话正常读写记忆');
+      const noSessionText = translate('memory.pause.noSession', '当前没有打开的会话，无法切换');
 
       return h(
         'div',
@@ -6274,7 +7097,38 @@ window.__ModuleLoader__.load({
           readFailed
             ? h('div', { className: 'MikufanMemoryNotice', role: 'alert' }, translate('memory.readFailed', '记忆列表读取失败，请刷新页面重试。'))
             : null,
-          loaded && entries.length > 0
+          notice !== ''
+            ? h('div', { className: 'MikufanMemoryNotice', role: 'status' }, notice)
+            : null,
+          /* 临时会话: pause memory for the open conversation only. The state
+             sentence doubles as the tooltip, and a missing Session disables
+             the switch instead of pretending it is off. */
+          h(
+            'div',
+            { className: 'MikufanMemSession' },
+            h(
+              'button',
+              {
+                type: 'button',
+                role: 'switch',
+                className: 'MikufanSwitch',
+                'aria-checked': paused,
+                'aria-pressed': paused,
+                'aria-label': translate('memory.pause.label', '本会话暂停记忆'),
+                title: sessionId === '' ? noSessionText : pauseText,
+                disabled: sessionId === '' || pauseBusy,
+                onClick: onTogglePause,
+              },
+              h('span', { className: 'MikufanSwitchThumb' }),
+            ),
+            h(
+              'div',
+              { className: 'MikufanMemSessionText' },
+              h('span', { className: 'MikufanMemSessionLabel' }, translate('memory.pause.label', '本会话暂停记忆')),
+              h('span', { className: 'MikufanMemSessionHint' }, sessionId === '' ? noSessionText : pauseText),
+            ),
+          ),
+          loaded
             ? h(
                 'div',
                 { className: 'MikufanMemoryBar' },
@@ -6285,13 +7139,40 @@ window.__ModuleLoader__.load({
                     count: entries.length,
                     enabled: enabledCount,
                   }) +
-                    (searching
+                    (narrowing
                       ? formatTemplate(translate('memory.bar.matched', ' · 匹配 {count}'), { count: visible.length })
                       : ''),
                 ),
                 h(
                   'div',
                   { className: 'MikufanMemoryTools' },
+                  h(
+                    'select',
+                    {
+                      className: 'MikufanMemFilter',
+                      value: scopeFilter,
+                      title: translate('memory.filter.label', '按范围筛选'),
+                      'aria-label': translate('memory.filter.label', '按范围筛选'),
+                      onChange: (event) => setScopeFilter(event.target.value),
+                    },
+                    h('option', { value: 'all' }, translate('memory.filter.all', '全部')),
+                    h('option', { value: 'global' }, translate('memory.filter.global', '全局')),
+                    h('option', { value: 'workspace' }, translate('memory.filter.workspace', '工作区')),
+                  ),
+                  h(
+                    'select',
+                    {
+                      className: 'MikufanMemFilter MikufanMemFilterStatus',
+                      value: statusFilter,
+                      title: translate('memory.filter.status.label', '按状态筛选'),
+                      'aria-label': translate('memory.filter.status.label', '按状态筛选'),
+                      onChange: (event) => setStatusFilter(event.target.value),
+                    },
+                    h('option', { value: 'all' }, translate('memory.filter.status.all', '全部状态')),
+                    h('option', { value: 'active' }, translate('memory.filter.status.active', '使用中')),
+                    h('option', { value: 'archived' }, translate('memory.filter.status.archived', '已归档')),
+                    h('option', { value: 'expired' }, translate('memory.filter.status.expired', '已过期')),
+                  ),
                   h(
                     'label',
                     { className: 'MikufanMemSearch' },
@@ -6319,6 +7200,38 @@ window.__ModuleLoader__.load({
                     },
                     h(RefreshIcon, null),
                   ),
+                  h(
+                    'button',
+                    {
+                      type: 'button',
+                      className: 'MikufanMemTool',
+                      title: translate('memory.export.json', '导出 JSON'),
+                      onClick: () => onExport('json'),
+                    },
+                    translate('memory.export.json', '导出 JSON'),
+                  ),
+                  h(
+                    'button',
+                    {
+                      type: 'button',
+                      className: 'MikufanMemTool',
+                      title: translate('memory.export.markdown', '导出 Markdown'),
+                      onClick: () => onExport('markdown'),
+                    },
+                    translate('memory.export.markdown', '导出 Markdown'),
+                  ),
+                  h(
+                    'label',
+                    { className: 'MikufanMemImport', title: translate('memory.import.hint', '从导出的 JSON 文件合并记忆') },
+                    translate('memory.import', '导入'),
+                    h('input', {
+                      type: 'file',
+                      className: 'MikufanMemFileInput',
+                      accept: 'application/json,.json',
+                      'aria-label': translate('memory.import', '导入'),
+                      onChange: onImportFile,
+                    }),
+                  ),
                 ),
               )
             : null,
@@ -6332,17 +7245,25 @@ window.__ModuleLoader__.load({
           ),
           loaded && entries.length === 0
             ? h('div', { className: 'MikufanMemoryEmpty' }, translate('memory.empty', '还没有记忆。点击上方卡片新建第一条。'))
-            : loaded && searching && visible.length === 0
+            : loaded && narrowing && visible.length === 0
               ? h('div', { className: 'MikufanMemoryEmpty' }, translate('memory.empty.search', '没有匹配的记忆。'))
               : null,
           dialog !== null && dialog.mode === 'create'
-            ? h(MemoryDialog, { key: 'create', mode: 'create', entry: null, translate, onClose: closeDialog })
+            ? h(MemoryDialog, {
+                key: 'create',
+                mode: 'create',
+                entry: null,
+                translate,
+                workspaceCwd: sessionCwd,
+                onClose: closeDialog,
+              })
             : editingEntry !== null
               ? h(MemoryDialog, {
                   key: `edit:${editingEntry.id}`,
                   mode: 'edit',
                   entry: editingEntry,
                   translate,
+                  workspaceCwd: sessionCwd,
                   onClose: closeDialog,
                 })
               : null,
@@ -6511,7 +7432,7 @@ window.__ModuleLoader__.load({
      * the user picks a page from the tab bar every time.
      */
     function ControlPanelPage(props) {
-      const { translate, startSkillSession } = props;
+      const { translate, startSkillSession, readCurrentSessionId } = props;
       const [tab, setTab] = useState(DEFAULT_TAB);
       const select = setTab;
       return h(
@@ -6545,7 +7466,7 @@ window.__ModuleLoader__.load({
           tab === 'dashboard'
             ? h(DashboardPage, { translate, onOpenPage: select })
             : tab === 'memory'
-              ? h(MemoryPageBody, { translate })
+              ? h(MemoryPageBody, { translate, currentSessionId: readCurrentSessionId })
               : tab === 'lan'
                 ? h(LanPageBody, { translate })
                 : tab === 'skills'
@@ -6938,6 +7859,22 @@ window.__ModuleLoader__.load({
         };
 
         /**
+         * The Session the control panel currently speaks for, or `''` when the
+         * Host reports none. The memory page's 临时会话 switch is scoped to it,
+         * so a panel opened without a Session shows the switch as disabled
+         * instead of writing a pause flag for nobody.
+         * @returns the open session key.
+         */
+        const readCurrentSessionId = () => {
+          try {
+            const snapshot = ctx.get('uiSession')?.adapter?.current?.getSnapshot?.();
+            return typeof snapshot?.key === 'string' ? snapshot.key : '';
+          } catch {
+            return '';
+          }
+        };
+
+        /**
          * Open a new Session with one draft in its composer — the "新建技能"
          * and "立即试用" actions both route through here. The draft is the
          * literal `/name` skill reference the Harness composer resolves, and a
@@ -7107,7 +8044,7 @@ window.__ModuleLoader__.load({
             {
               name: MAIN_SLOT,
               key: CONTROL_PANEL_ID,
-              inject: () => ({ translate, openSkillInSidebar, startSkillSession }),
+              inject: () => ({ translate, openSkillInSidebar, startSkillSession, readCurrentSessionId }),
             },
             ControlPanelPage,
           ),

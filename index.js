@@ -81,7 +81,18 @@ import {
   splashIndexInjections,
   SPLASH_ROUTE,
 } from './splash.js';
-import { createMemoryTools, MEMORY_FILE_NAME, MemoryStore, publicEntry, queryTerms, similarity } from './memory.js';
+import {
+  createMemoryTools,
+  GLOBAL_SCOPE,
+  isScope,
+  MEMORY_FILE_NAME,
+  MEMORY_VERSION,
+  MemoryStore,
+  publicEntry,
+  queryTerms,
+  similarity,
+  workspaceScope,
+} from './memory.js';
 import {
   countRunningSessions,
   relaunchDsh,
@@ -144,6 +155,8 @@ const ROUTE_PREFIX = '/mikufan/api';
 const SWEEP_DELAY_MS = 1500;
 /** Largest accepted request body for the mark endpoints. */
 const MAX_BODY_BYTES = 16 * 1024;
+/** Upper bound for one memory import payload (a full export with 200 entries). */
+const MAX_MEMORY_IMPORT_BYTES = 4 * 1024 * 1024;
 /**
  * Largest accepted request body for the AGENTS.md editor.
  *
@@ -160,6 +173,8 @@ const SESSION_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,190}$/;
 const STATE_FILE_NAME = 'delete-sessions.json';
 /** Own preference file name, under `<DSH home>/dsh-mikufan/`. */
 const PREFERENCES_FILE_NAME = 'preferences.json';
+/** Session ids whose memory reads/writes are temporarily paused. */
+const MEMORY_PAUSE_FILE_NAME = 'memory-pause.json';
 /** State file schema version. */
 const STATE_VERSION = 1;
 /** Preference file schema version (2 adds the delete-sessions switch). */
@@ -414,6 +429,112 @@ class PreferencesStore {
       });
     return this.writing;
   }
+}
+
+/**
+ * Session-scoped memory pause ("临时会话"): the four memory tools are hidden
+ * and the prompt index is empty for a paused session, while every entry stays
+ * on disk. Ids expire after 30 days so a forgotten pause cannot linger forever.
+ */
+class PauseStore {
+  /**
+   * @param file - absolute path of the pause document.
+   * @param log - reporter.
+   */
+  constructor(file, log) {
+    this.file = file;
+    this.log = log;
+    /** @type {Map<string, string>} session id -> pausedAt ISO */
+    this.sessions = new Map();
+    this.writing = Promise.resolve();
+    this.loadSync();
+  }
+
+  /** Read the pause document, dropping entries older than 30 days. */
+  loadSync() {
+    let text;
+    try {
+      text = readFileSync(this.file, 'utf8');
+    } catch (error) {
+      if (error?.code !== 'ENOENT') this.log(`memory pause unreadable: ${error?.message ?? error}`);
+      return;
+    }
+    try {
+      const parsed = JSON.parse(text);
+      const sessions = parsed?.sessions;
+      const cutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
+      if (sessions !== null && typeof sessions === 'object') {
+        for (const [id, at] of Object.entries(sessions)) {
+          if (typeof id !== 'string' || id === '') continue;
+          if (typeof at === 'string' && Number.isFinite(Date.parse(at)) && Date.parse(at) < cutoff) continue;
+          this.sessions.set(id, typeof at === 'string' ? at : new Date().toISOString());
+        }
+      }
+    } catch {
+      this.log('memory pause not valid JSON; starting empty');
+    }
+  }
+
+  /** @returns whether the session is paused. */
+  has(id) {
+    return typeof id === 'string' && this.sessions.has(id);
+  }
+
+  /** @returns the paused session ids. */
+  list() {
+    return [...this.sessions.keys()];
+  }
+
+  /**
+   * Pause or resume one session.
+   * @param id - session id.
+   * @param paused - desired state.
+   * @returns the effective state.
+   */
+  async set(id, paused) {
+    if (typeof id !== 'string' || id === '') throw new Error('sessionId is required');
+    if (paused) this.sessions.set(id, new Date().toISOString());
+    else this.sessions.delete(id);
+    await this.save();
+    return this.has(id);
+  }
+
+  /** Persist the pause document atomically. */
+  save() {
+    const snapshot = { version: 1, sessions: Object.fromEntries(this.sessions), updatedAt: new Date().toISOString() };
+    this.writing = this.writing
+      .catch(() => {})
+      .then(async () => {
+        await mkdir(dirname(this.file), { recursive: true });
+        const temporary = `${this.file}.${process.pid}.tmp`;
+        await writeFile(temporary, `${JSON.stringify(snapshot, null, 2)}\n`, 'utf8');
+        await rename(temporary, this.file);
+      })
+      .catch((error) => {
+        this.log(`could not save memory pause: ${error?.message ?? error}`);
+      });
+    return this.writing;
+  }
+}
+
+/**
+ * Build the prompt index one Agent sees: the feature switch, the session pause
+ * and the Agent's workspace decide. Exported so the decision is testable
+ * without booting the plugin.
+ * @param services - memory store, preference store, pause store, working directory.
+ * @param agent - the Agent whose prompt is being assembled.
+ * @returns the index text, or '' when nothing should be injected.
+ */
+export function memoryIndexText({ memory, preferences, memoryPause, workingDirectory }, agent) {
+  if (preferences?.memoryEnabled !== true) return '';
+  if (memoryPause?.has(agent?.session?.id)) return '';
+  let cwd;
+  try {
+    cwd = workingDirectory?.get?.(agent.session);
+  } catch {
+    cwd = undefined;
+  }
+  return memory.indexText({ scope: typeof cwd === 'string' && cwd !== '' ? workspaceScope(cwd) : undefined });
 }
 
 /**
@@ -775,6 +896,19 @@ async function readJsonBody(req, limit = MAX_BODY_BYTES) {
   return JSON.parse(text);
 }
 
+/** Write one downloadable text response (memory export). */
+function writeText(res, status, contentType, filename, text) {
+  if (res.headersSent === true) {
+    res.destroy?.();
+    return;
+  }
+  res.writeHead(status, {
+    'content-type': contentType,
+    'content-disposition': `attachment; filename="${filename}"`,
+  });
+  res.end(text);
+}
+
 /** Write one JSON response. */
 function writeJson(res, status, body) {
   if (res.headersSent === true) {
@@ -802,9 +936,15 @@ function publicSkill(detail) {
  * - `POST <prefix>/preferences` → updates any built-in feature switch (the
  *   switches are rendered by the sidebar Control panel now)
  * - `GET  <prefix>/memory` → `{ ok: true, value: { entries } }` (all entries)
- * - `POST <prefix>/memory`  `{content, type?, source?}` → creates one entry
- * - `PATCH <prefix>/memory/<id>` `{content?, type?, enabled?}` → updates one entry
+ * - `POST <prefix>/memory`  `{title?, content, type?, scope?, pinned?, expiresAt?}` → creates one entry
+ * - `PATCH <prefix>/memory/<id>` `{title?, content?, type?, scope?, enabled?, status?,
+ *   pinned?, expiresAt?}` → updates one entry
  * - `DELETE <prefix>/memory/<id>` → removes one entry
+ * - `GET  <prefix>/memory/export?format=json|markdown` → a downloadable document
+ *   (the only non-envelope response on this route)
+ * - `POST <prefix>/memory/import` `{data}` → merges an exported document
+ * - `GET  <prefix>/memory/pause?sessionId=` → pause state for one session
+ * - `POST <prefix>/memory/pause` `{sessionId, paused}` → pauses/resumes memory for one session
  * - `GET  <prefix>/lan/status` → LAN proxy state, saved preferences, detected
  *   addresses (the dsh-lan-access engine, integrated)
  * - `POST <prefix>/lan/preferences` `{lanAccessEnabled?, lanHost?, lanPort?,
@@ -839,7 +979,7 @@ function publicSkill(detail) {
  *   the MCP store, the restart controller, and the reporter.
  * @returns the route handler.
  */
-function createRouteHandler({ ctx, store, preferences, memory, lan, skillsRoot, agentHome, mcp, bundledMarkerFile, restart, log }) {
+function createRouteHandler({ ctx, store, preferences, memory, memoryPause, lan, skillsRoot, agentHome, mcp, bundledMarkerFile, restart, log }) {
   const trusted = (req) => {
     try {
       const connection = ctx.get('connection');
@@ -894,12 +1034,132 @@ function createRouteHandler({ ctx, store, preferences, memory, lan, skillsRoot, 
           return;
         }
         const body = await readJsonBody(req);
+        if (body?.scope !== undefined && !isScope(body.scope)) {
+          envelope(res, 400, undefined, { code: 'bad-scope', message: 'scope must be "global" or "workspace:<path>"' });
+          return;
+        }
         const entry = await memory.create({
           content: body?.content,
+          ...(typeof body?.title === 'string' ? { title: body.title } : {}),
           ...(typeof body?.type === 'string' ? { type: body.type } : {}),
+          ...(body?.scope !== undefined ? { scope: body.scope } : {}),
+          ...(typeof body?.pinned === 'boolean' ? { pinned: body.pinned } : {}),
+          ...(body?.expiresAt !== undefined ? { expiresAt: body.expiresAt } : {}),
           source: 'manual',
         });
         envelope(res, 200, { entry: publicEntry(entry) });
+        return;
+      }
+      if (action === 'memory/session' && req.method === 'GET') {
+        const url = new URL(req.url ?? '/', 'http://dsh.internal');
+        const sessionId = url.searchParams.get('sessionId') ?? '';
+        let cwd;
+        try {
+          const agent = sessionId === '' ? undefined : ctx.get('agents')?.get?.(sessionId);
+          const directory = ctx.get('workingDirectory');
+          cwd = agent === undefined ? undefined : directory?.get?.(agent.session);
+        } catch {
+          cwd = undefined;
+        }
+        const known = typeof cwd === 'string' && cwd !== '';
+        envelope(res, 200, {
+          sessionId,
+          cwd: known ? cwd : null,
+          scope: known ? workspaceScope(cwd) : null,
+        });
+        return;
+      }
+      if (action === 'memory/pause') {
+        if (memoryPause === undefined) {
+          envelope(res, 503, undefined, { code: 'unavailable', message: 'memory pause is unavailable' });
+          return;
+        }
+        if (req.method === 'GET') {
+          const url = new URL(req.url ?? '/', 'http://dsh.internal');
+          const sessionId = url.searchParams.get('sessionId') ?? '';
+          envelope(res, 200, { sessionId, paused: memoryPause.has(sessionId), sessions: memoryPause.list() });
+          return;
+        }
+        if (req.method === 'POST') {
+          const body = await readJsonBody(req);
+          if (typeof body?.sessionId !== 'string' || body.sessionId === '') {
+            envelope(res, 400, undefined, { code: 'bad-session-id', message: 'sessionId is required' });
+            return;
+          }
+          if (typeof body?.paused !== 'boolean') {
+            envelope(res, 400, undefined, { code: 'bad-pause', message: 'paused must be a boolean' });
+            return;
+          }
+          const paused = await memoryPause.set(body.sessionId, body.paused);
+          envelope(res, 200, { sessionId: body.sessionId, paused });
+          return;
+        }
+      }
+      if (action === 'memory/export' && req.method === 'GET') {
+        if (memory === undefined) {
+          envelope(res, 503, undefined, { code: 'unavailable', message: 'memory is unavailable' });
+          return;
+        }
+        const url = new URL(req.url ?? '/', 'http://dsh.internal');
+        const format = url.searchParams.get('format') === 'markdown' ? 'markdown' : 'json';
+        const document = memory.exportDoc();
+        const stamp = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+        if (format === 'markdown') {
+          const lines = [
+            '# dsh-mikufan memory export',
+            '',
+            'exported: ' + document.exportedAt,
+            'entries: ' + document.entries.length,
+            '',
+          ];
+          for (const entry of document.entries) {
+            lines.push(
+              '## ' + entry.title,
+              '',
+              '- id: ' + entry.id,
+              '- type: ' + entry.type,
+              '- scope: ' + entry.scope,
+              '- status: ' + entry.status,
+              '- pinned: ' + String(entry.pinned),
+              '- updated: ' + entry.updatedAt,
+              '',
+              entry.content,
+              '',
+            );
+          }
+          writeText(res, 200, 'text/markdown; charset=utf-8', 'memory-' + stamp + '.md', lines.join('\n'));
+          return;
+        }
+        writeText(
+          res,
+          200,
+          'application/json; charset=utf-8',
+          'memory-' + stamp + '.json',
+          JSON.stringify(document, null, 2) + '\n',
+        );
+        return;
+      }
+      if (action === 'memory/import' && req.method === 'POST') {
+        if (memory === undefined) {
+          envelope(res, 503, undefined, { code: 'unavailable', message: 'memory is unavailable' });
+          return;
+        }
+        const body = await readJsonBody(req, MAX_MEMORY_IMPORT_BYTES);
+        let document = body?.data;
+        if (typeof document === 'string') {
+          try {
+            document = JSON.parse(document);
+          } catch {
+            envelope(res, 400, undefined, { code: 'bad-import', message: 'data is not valid JSON' });
+            return;
+          }
+        }
+        if (document === undefined || document === null) {
+          envelope(res, 400, undefined, { code: 'bad-import', message: 'provide data (an exported memory document)' });
+          return;
+        }
+        const result = await memory.importDoc(document);
+        envelope(res, 200, result);
         return;
       }
       {
@@ -913,10 +1173,20 @@ function createRouteHandler({ ctx, store, preferences, memory, lan, skillsRoot, 
           }
           if (req.method === 'PATCH') {
             const body = await readJsonBody(req);
+            if (body?.scope !== undefined && !isScope(body.scope)) {
+              envelope(res, 400, undefined, { code: 'bad-scope', message: 'scope must be "global" or "workspace:<path>"' });
+              return;
+            }
             const updated = await memory.update(id, {
               ...(typeof body?.content === 'string' ? { content: body.content } : {}),
+              ...(typeof body?.title === 'string' ? { title: body.title } : {}),
               ...(typeof body?.type === 'string' ? { type: body.type } : {}),
+              ...(typeof body?.scope === 'string' ? { scope: body.scope } : {}),
               ...(typeof body?.enabled === 'boolean' ? { enabled: body.enabled } : {}),
+              ...(typeof body?.status === 'string' ? { status: body.status } : {}),
+              ...(typeof body?.pinned === 'boolean' ? { pinned: body.pinned } : {}),
+              ...(body?.expiresAt !== undefined ? { expiresAt: body.expiresAt } : {}),
+              ...(body?.supersededBy !== undefined ? { supersededBy: body.supersededBy } : {}),
             });
             envelope(res, 200, { entry: publicEntry(updated) });
             return;
@@ -1427,6 +1697,7 @@ export function apply(ctx) {
   const store = new DeleteSessionStore(join(dshHome, PLUGIN_NAME, STATE_FILE_NAME), log);
   const preferences = new PreferencesStore(join(dshHome, PLUGIN_NAME, PREFERENCES_FILE_NAME), log);
   const memory = new MemoryStore(join(dshHome, PLUGIN_NAME, MEMORY_FILE_NAME), log);
+  const memoryPause = new PauseStore(join(dshHome, PLUGIN_NAME, MEMORY_PAUSE_FILE_NAME), log);
   const skillsRoot = join(dshHome, SKILLS_DIR_NAME);
   /** Records which bundled skills were installed once, so a removal sticks. */
   const bundledMarkerFile = join(dshHome, PLUGIN_NAME, 'bundled-skills.json');
@@ -1520,13 +1791,37 @@ export function apply(ctx) {
   // tool set is registered and disposed within the running process without a
   // reload (the route also touches a module-scoped disposer for the pre-route
   // window, because the route handler is created before the inject body runs).
+  /**
+   * Resolve the calling session's scope, working directory and id: writes are
+   * filed under the workspace the Agent runs in, and carry provenance.
+   * @param exec - the tool execution context (its agent is optional).
+   */
+  const memoryContextOf = (exec) => {
+    const agent = exec?.agent;
+    if (agent === undefined) return undefined;
+    let cwd;
+    try {
+      cwd = ctx.get('workingDirectory')?.get(agent.session);
+    } catch {
+      cwd = undefined;
+    }
+    return {
+      scope: typeof cwd === 'string' && cwd !== '' ? workspaceScope(cwd) : undefined,
+      cwd,
+      sessionId: typeof agent.session?.id === 'string' ? agent.session.id : undefined,
+    };
+  };
+
+  /** Tools stay out of a session whose memory was paused from the panel. */
+  const memoryToolVisible = ({ agent }) => !memoryPause.has(agent?.session?.id);
+
   /** Disposer for the tool set, owned by whichever effect last registered it. */
   let memoryToolsDispose = null;
   const registerOrReleaseMemoryTools = (enabled) => {
     if (enabled && memoryToolsDispose === null) {
-      const disposers = createMemoryTools(memory).map((definition) => {
+      const disposers = createMemoryTools(memory, { resolveContext: memoryContextOf }).map((definition) => {
         try {
-          return ctx.get('tools')?.register(definition);
+          return ctx.get('tools')?.register(definition, { when: memoryToolVisible });
         } catch {
           return undefined;
         }
@@ -1552,7 +1847,9 @@ export function apply(ctx) {
   ctx.inject(['tools'], (scoped) => {
     if (preferences.memoryEnabled !== true) return undefined;
     memoryToolsDispose = null; // the inject body owns the lifecycle now
-    const disposers = createMemoryTools(memory).map((definition) => scoped.tools.register(definition));
+    const disposers = createMemoryTools(memory, { resolveContext: memoryContextOf }).map((definition) =>
+      scoped.tools.register(definition, { when: memoryToolVisible }),
+    );
     memoryToolsDispose = () => {
       for (const dispose of disposers) dispose();
     };
@@ -1570,15 +1867,63 @@ export function apply(ctx) {
   // Also waits for its service through `inject` — same race as above: an
   // effect reading `ctx.get('systemPrompt')` before the service exists would
   // read `undefined` and never re-run, so the index would never attach.
-  ctx.inject(['systemPrompt'], (scoped) => {
-    return scoped.systemPrompt.context({
-      name: 'dsh-mikufan:memory-index',
-      order: 150,
-      text: () => {
-        if (preferences.memoryEnabled !== true) return '';
-        return memory.indexText();
-      },
+  ctx.inject(['systemPrompt', 'agents'], (scoped) => {
+    // A ctx without the agents service (unit harnesses, minimal embeddings)
+    // keeps the v1 behaviour: one global context, unscoped.
+    if (scoped.agents === undefined || typeof scoped.agents.list !== 'function') {
+      return scoped.systemPrompt.context({
+        name: 'dsh-mikufan:memory-index',
+        order: 150,
+        text: () => (preferences.memoryEnabled === true ? memory.indexText() : ''),
+      });
+    }
+    /** @type {Map<object, () => void>} */
+    const disposers = new Map();
+    const workingDirectoryOf = () => {
+      try {
+        return ctx.get('workingDirectory');
+      } catch {
+        return undefined;
+      }
+    };
+    const indexTextFor = (agent) =>
+      memoryIndexText({ memory, preferences, memoryPause, workingDirectory: workingDirectoryOf() }, agent);
+    const install = (agent) => {
+      if (agent === undefined || disposers.has(agent)) return;
+      // An Agent published without a scoped prompt service cannot carry an
+      // index; skip it instead of failing the whole plugin.
+      if (agent.ctx?.systemPrompt === undefined) return;
+      try {
+        disposers.set(
+          agent,
+          agent.ctx.systemPrompt.context({
+            name: 'dsh-mikufan:memory-index',
+            order: 150,
+            text: () => indexTextFor(agent),
+          }),
+        );
+      } catch (error) {
+        log(`memory index failed: ${error?.message ?? error}`);
+      }
+    };
+    for (const agent of scoped.agents.list()) install(agent);
+    const offCreated = ctx.on('agent/created', ({ agent }) => install(agent));
+    const offDisposed = ctx.on('agent/disposed', ({ agent }) => {
+      disposers.get(agent)?.();
+      disposers.delete(agent);
     });
+    return () => {
+      offCreated?.();
+      offDisposed?.();
+      for (const dispose of disposers.values()) {
+        try {
+          dispose();
+        } catch {
+          /* the Agent scope is already gone */
+        }
+      }
+      disposers.clear();
+    };
   });
 
   // The cover belongs in the served index.html, before the app module runs. The
@@ -1818,7 +2163,7 @@ export function apply(ctx) {
         scoped.webServer.register({
           kind: 'prefix',
           path: ROUTE_PREFIX,
-          handler: createRouteHandler({ ctx, store, preferences, memory, lan, skillsRoot, agentHome: dshHome, mcp, bundledMarkerFile, restart, log }),
+          handler: createRouteHandler({ ctx, store, preferences, memory, memoryPause, lan, skillsRoot, agentHome: dshHome, mcp, bundledMarkerFile, restart, log }),
         }),
       `${PLUGIN_NAME}: ${ROUTE_PREFIX} routes`,
     );
@@ -1829,7 +2174,9 @@ export function apply(ctx) {
 export const __internal = {
   DeleteSessionStore,
   PreferencesStore,
+  PauseStore,
   MemoryStore,
+  memoryIndexText,
   createMemoryTools,
   similarity,
   queryTerms,
